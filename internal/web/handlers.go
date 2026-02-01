@@ -12,32 +12,42 @@ import (
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/domain"
 )
 
+// IndexData is the view model for the index page.
+type IndexData struct {
+	Results *ResultsViewData
+}
+
 // handleIndex serves the main page (GET only, read-only, never triggers crawl).
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.templates.ExecuteTemplate(w, "index.html", nil); err != nil {
+	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{}); err != nil {
 		s.logger.Error("failed to render index", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
+// isHTMXRequest checks if the request is an HTMX request.
+func isHTMXRequest(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true"
+}
+
 // handleInspect handles domain inspection requests (POST only, can trigger crawl).
 func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.renderError(w, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
+		s.renderError(w, r, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
 		return
 	}
 
 	rawDomain := r.FormValue("domain")
 	normalizedDomain, err := domain.NormalizeAndValidate(rawDomain)
 	if err != nil {
-		s.renderError(w, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
+		s.renderError(w, r, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
 		return
 	}
 
 	// Check for IP literals (SSRF prevention)
 	if isIPLiteral(normalizedDomain) {
-		s.renderError(w, "Invalid Domain", "IP addresses are not allowed. Please enter a domain name.", http.StatusBadRequest)
+		s.renderError(w, r, "Invalid Domain", "IP addresses are not allowed. Please enter a domain name.", http.StatusBadRequest)
 		return
 	}
 
@@ -67,7 +77,7 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.renderError(w, "Crawl Failed", formatCrawlError(crawlErr), http.StatusOK)
+		s.renderError(w, r, "Crawl Failed", formatCrawlError(crawlErr), http.StatusOK)
 		return
 	}
 
@@ -78,14 +88,14 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 // handleRefresh handles force refresh requests (POST only, can trigger crawl).
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.renderError(w, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
+		s.renderError(w, r, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
 		return
 	}
 
 	rawDomain := r.FormValue("domain")
 	normalizedDomain, err := domain.NormalizeAndValidate(rawDomain)
 	if err != nil {
-		s.renderError(w, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
+		s.renderError(w, r, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
 		return
 	}
 
@@ -93,12 +103,12 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	canForce, waitTime, err := s.repo.CanForcedRefresh(r.Context(), normalizedDomain, s.config.ForcedRefreshWindow)
 	if err != nil {
 		s.logger.Error("failed to check forced refresh eligibility", "domain", normalizedDomain, "error", err)
-		s.renderError(w, "Error", "Could not verify refresh eligibility.", http.StatusInternalServerError)
+		s.renderError(w, r, "Error", "Could not verify refresh eligibility.", http.StatusInternalServerError)
 		return
 	}
 
 	if !canForce {
-		s.renderError(w, "Refresh Not Available", fmt.Sprintf("Force refresh will be available in %s.", formatDuration(waitTime)), http.StatusTooManyRequests)
+		s.renderError(w, r, "Refresh Not Available", fmt.Sprintf("Force refresh will be available in %s.", formatDuration(waitTime)), http.StatusTooManyRequests)
 		return
 	}
 
@@ -114,7 +124,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.renderError(w, "Crawl Failed", formatCrawlError(crawlErr), http.StatusOK)
+		s.renderError(w, r, "Crawl Failed", formatCrawlError(crawlErr), http.StatusOK)
 		return
 	}
 
@@ -213,22 +223,36 @@ func (s *Server) performCrawl(ctx context.Context, domainName string, forced boo
 	return result, nil
 }
 
+// ErrorData is the view model for error display.
+type ErrorData struct {
+	Title            string
+	Message          string
+	HasCachedResults bool
+}
+
 // renderError renders an error message.
-func (s *Server) renderError(w http.ResponseWriter, title, message string, status int) {
+func (s *Server) renderError(w http.ResponseWriter, r *http.Request, title, message string, status int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 
-	data := struct {
-		Title            string
-		Message          string
-		HasCachedResults bool
-	}{
+	errData := &ErrorData{
 		Title:   title,
 		Message: message,
 	}
 
-	if err := s.templates.ExecuteTemplate(w, "error", data); err != nil {
-		s.logger.Error("failed to render error template", "error", err)
+	// For HTMX requests, just render the error fragment
+	if isHTMXRequest(r) {
+		if err := s.templates.ExecuteTemplate(w, "error", errData); err != nil {
+			s.logger.Error("failed to render error template", "error", err)
+			fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", title, message)
+		}
+		return
+	}
+
+	// For regular requests, render full page with error
+	pageData := &IndexData{}
+	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
+		s.logger.Error("failed to render error page", "error", err)
 		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", title, message)
 	}
 }
@@ -239,11 +263,7 @@ func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, res
 
 	data := buildResultsViewData(result, true, canForce, waitTime, lastCrawlFailed)
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
-		s.logger.Error("failed to render results", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
+	s.renderResults(w, r, data)
 }
 
 // renderCachedResultsWithError renders cached results with an error notice.
@@ -265,9 +285,26 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 
 	data := buildResultsViewData(domainResult, false, canForce, waitTime, false)
 
+	s.renderResults(w, r, data)
+}
+
+// renderResults renders results, either as a fragment for HTMX or as a full page for regular requests.
+func (s *Server) renderResults(w http.ResponseWriter, r *http.Request, data *ResultsViewData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
-		s.logger.Error("failed to render results", "error", err)
+
+	// If HTMX request, render just the results fragment
+	if isHTMXRequest(r) {
+		if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
+			s.logger.Error("failed to render results", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Otherwise, render the full page with results
+	pageData := &IndexData{Results: data}
+	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
+		s.logger.Error("failed to render full page with results", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }

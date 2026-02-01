@@ -173,6 +173,7 @@ func TestHandleInspect_InvalidDomain(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("HX-Request", "true") // Simulate HTMX request
 			req.Host = "localhost:8080"
 
 			w := httptest.NewRecorder()
@@ -305,6 +306,7 @@ func TestHandleInspect_CachedResult(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true") // Simulate HTMX request
 	req.Host = "localhost:8080"
 
 	w := httptest.NewRecorder()
@@ -315,7 +317,7 @@ func TestHandleInspect_CachedResult(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if !strings.Contains(body, "Cached") {
+	if !strings.Contains(body, "cached") {
 		t.Error("Expected result to show cached status")
 	}
 }
@@ -337,6 +339,7 @@ func TestHandleRefresh_NotAllowed(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/refresh", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true") // Simulate HTMX request
 	req.Host = "localhost:8080"
 
 	w := httptest.NewRecorder()
