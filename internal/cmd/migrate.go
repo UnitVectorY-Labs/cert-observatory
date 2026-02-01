@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/db"
 )
@@ -79,12 +78,6 @@ func DefaultMigrateConfig() *MigrateConfig {
 // MigrateStatus shows the current migration status.
 func MigrateStatus(ctx context.Context, cfg *MigrateConfig) error {
 	logger := slog.New(slog.NewTextHandler(cfg.Stderr, nil))
-
-	// Connect to database with a timeout
-	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	_ = connectCtx // Use context in actual implementation if needed
 
 	database, err := db.Open(cfg.DBConfig)
 	if err != nil {

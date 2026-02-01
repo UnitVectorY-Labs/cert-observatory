@@ -1,6 +1,7 @@
 package db
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -223,7 +224,7 @@ func (r *Repository) updateDomainSuccess(ctx context.Context, tx *sql.Tx, domain
 		return false, fmt.Errorf("get current chain: %w", err)
 	}
 
-	chainChanged := !bytesEqual(currentChainHash, chainHash)
+	chainChanged := !bytes.Equal(currentChainHash, chainHash)
 
 	// Build update based on mode
 	var query string
@@ -297,7 +298,7 @@ func (r *Repository) updateDomainChainState(ctx context.Context, tx *sql.Tx, dom
 	}
 
 	// Current interval exists
-	if bytesEqual(currentChainHash, chainHash) {
+	if bytes.Equal(currentChainHash, chainHash) {
 		// Same chain, update interval
 		_, err = tx.ExecContext(ctx, `
 			UPDATE domain_chain_states SET
@@ -364,7 +365,7 @@ func (r *Repository) populateCertSigners(ctx context.Context, tx *sql.Tx, certs 
 		// Insert cert_signers relationships
 		for _, issuerHash := range issuerHashes {
 			// Skip self-referential entries
-			if bytesEqual(cert.CertHash, issuerHash) {
+			if bytes.Equal(cert.CertHash, issuerHash) {
 				continue
 			}
 
@@ -442,17 +443,4 @@ func nullableBytes(b []byte) interface{} {
 		return nil
 	}
 	return b
-}
-
-// bytesEqual compares two byte slices for equality.
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

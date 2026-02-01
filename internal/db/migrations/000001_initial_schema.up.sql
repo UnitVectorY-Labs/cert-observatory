@@ -1,5 +1,5 @@
 /*
-GetCert Database Schema (PostgreSQL)
+cert-observatory Database Schema (PostgreSQL)
 
 Purpose:
 - Catalog TLS certificates (deduplicated by hash)

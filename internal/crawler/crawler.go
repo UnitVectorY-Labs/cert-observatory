@@ -98,10 +98,12 @@ func (c *Crawler) Crawl(ctx context.Context, domain string) (*CrawlResult, error
 	// Configure TLS
 	tlsConfig := &tls.Config{
 		ServerName: domain, // SNI
-		// Do not require chain validation to succeed
-		InsecureSkipVerify: true,
-		// Minimum TLS version for security
-		MinVersion: tls.VersionTLS10,
+		// Do not require chain validation to succeed - this is intentional
+		// because we want to capture certificates from all servers regardless
+		// of trust status. This is a certificate observation tool, not a client.
+		InsecureSkipVerify: true, //nolint:gosec // Intentional: observing certificates, not validating trust
+		// Minimum TLS version - TLS 1.2 is the minimum secure version
+		MinVersion: tls.VersionTLS12,
 	}
 
 	// Perform TLS handshake

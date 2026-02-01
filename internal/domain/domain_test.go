@@ -210,7 +210,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 		},
 		{
 			name:       "label too long (64 chars)",
-			input:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+			input:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com", // 64 'a's exceeds 63 char limit
 			wantErr:    ErrDomainLabelTooLong,
 		},
 
