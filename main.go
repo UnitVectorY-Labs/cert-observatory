@@ -259,7 +259,7 @@ This allows the job to run daily with a small overlap window for idempotency.`,
 
 	// Crawl configuration flags
 	c.Flags().IntVar(&cfg.AgeDays, "age-days", 1, "Days since last crawl to qualify for re-crawl (env: CERT_OBS_CRAWL_AGE_DAYS)")
-	c.Flags().IntVar(&cfg.Parallel, "parallel", 4, "Number of domains to crawl concurrently (env: CERT_OBS_CRAWL_PARALLEL)")
+	c.Flags().IntVar(&cfg.Parallel, "parallel", 2, "Number of domains to crawl concurrently (env: CERT_OBS_CRAWL_PARALLEL)")
 	c.Flags().DurationVar(&cfg.Timeout, "timeout", 10*time.Second, "Timeout for each crawl operation")
 	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
 

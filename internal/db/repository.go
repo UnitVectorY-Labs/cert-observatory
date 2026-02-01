@@ -251,6 +251,20 @@ func (r *Repository) updateDomainSuccess(ctx context.Context, tx *sql.Tx, domain
 				consecutive_failures = 0
 			WHERE domain_id = $1
 		`
+	case CrawlModeAuto:
+		// Auto mode also updates standard timestamps so web interface
+		// recognizes recently crawled domains and doesn't force re-crawl
+		query = `
+			UPDATE domains SET
+				current_chain_hash = $2,
+				current_chain_updated_at = $3,
+				last_success_at = $3,
+				last_standard_attempt_at = $3,
+				last_standard_success_at = $3,
+				consecutive_failures = 0,
+				no_retry_before = NULL
+			WHERE domain_id = $1
+		`
 	default:
 		query = `
 			UPDATE domains SET

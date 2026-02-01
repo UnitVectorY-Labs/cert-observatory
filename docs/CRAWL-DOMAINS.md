@@ -56,7 +56,7 @@ On success, the failure counter is reset and backoff is cleared.
 | Flag | Env Variable | Default | Description |
 |------|--------------|---------|-------------|
 | `--age-days` | `CERT_OBS_CRAWL_AGE_DAYS` | `1` | Days since last crawl to qualify for re-crawl |
-| `--parallel` | `CERT_OBS_CRAWL_PARALLEL` | `4` | Number of domains to crawl concurrently |
+| `--parallel` | `CERT_OBS_CRAWL_PARALLEL` | `2` | Number of domains to crawl concurrently |
 | `--timeout` | - | `10s` | Timeout for each crawl operation |
 | `--verbose` | - | `false` | Enable verbose/debug logging |
 

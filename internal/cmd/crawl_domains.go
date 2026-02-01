@@ -35,7 +35,7 @@ type CrawlDomainsConfig struct {
 func DefaultCrawlDomainsConfig() *CrawlDomainsConfig {
 	return &CrawlDomainsConfig{
 		AgeDays:  1,
-		Parallel: 4,
+		Parallel: 2,
 		Timeout:  10 * time.Second,
 		Stderr:   os.Stderr,
 	}
