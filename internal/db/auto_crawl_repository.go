@@ -385,7 +385,7 @@ func (r *Repository) CheckCertificatesExist(ctx context.Context, hashes [][]byte
 		return existing, nil
 	}
 
-	// Check in batches of 100
+	// Check in batches of 100 using IN clause
 	batchSize := 100
 	for i := 0; i < len(hashes); i += batchSize {
 		end := i + batchSize
@@ -394,19 +394,48 @@ func (r *Repository) CheckCertificatesExist(ctx context.Context, hashes [][]byte
 		}
 
 		batch := hashes[i:end]
-		for _, hash := range batch {
-			var exists bool
-			err := r.db.QueryRowContext(ctx, `
-				SELECT EXISTS(SELECT 1 FROM certificates WHERE cert_hash = $1)
-			`, hash).Scan(&exists)
-			if err != nil {
-				return nil, fmt.Errorf("check certificate exists: %w", err)
+
+		// Build query with placeholders for IN clause
+		placeholders := make([]string, len(batch))
+		args := make([]interface{}, len(batch))
+		for j, hash := range batch {
+			placeholders[j] = fmt.Sprintf("$%d", j+1)
+			args[j] = hash
+		}
+
+		query := `SELECT cert_hash FROM certificates WHERE cert_hash IN (` + joinStrings(placeholders, ",") + `)`
+
+		rows, err := r.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("check certificates exist: %w", err)
+		}
+
+		for rows.Next() {
+			var certHash []byte
+			if err := rows.Scan(&certHash); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan cert_hash: %w", err)
 			}
-			if exists {
-				existing[string(hash)] = true
-			}
+			existing[string(certHash)] = true
+		}
+		rows.Close()
+
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("iterate certificates: %w", err)
 		}
 	}
 
 	return existing, nil
+}
+
+// joinStrings joins strings with a separator (simple helper to avoid importing strings package).
+func joinStrings(parts []string, sep string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	result := parts[0]
+	for i := 1; i < len(parts); i++ {
+		result += sep + parts[i]
+	}
+	return result
 }

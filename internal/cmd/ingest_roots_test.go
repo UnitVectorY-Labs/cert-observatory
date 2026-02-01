@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func generateTestPEMBundle(t *testing.T, count int) []byte {
 
 	var bundle []byte
 	for i := 0; i < count; i++ {
-		cert := generateTestCert(t, "test-cert-"+string(rune('a'+i)))
+		cert := generateTestCert(t, fmt.Sprintf("test-cert-%d", i))
 		pemBlock := &pem.Block{
 			Type:  "CERTIFICATE",
 			Bytes: cert.Raw,

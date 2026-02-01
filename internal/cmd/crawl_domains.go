@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -227,32 +228,19 @@ func categorizeError(err error) string {
 
 	// Check for common error patterns
 	switch {
-	case contains(errStr, "timeout"):
+	case strings.Contains(errStr, "timeout"):
 		return "timeout"
-	case contains(errStr, "connection refused"):
+	case strings.Contains(errStr, "connection refused"):
 		return "connection_refused"
-	case contains(errStr, "no such host"):
+	case strings.Contains(errStr, "no such host"):
 		return "dns_error"
-	case contains(errStr, "handshake"):
+	case strings.Contains(errStr, "handshake"):
 		return "handshake_failure"
-	case contains(errStr, "certificate"):
+	case strings.Contains(errStr, "certificate"):
 		return "certificate_error"
-	case contains(errStr, "network"):
+	case strings.Contains(errStr, "network"):
 		return "network_error"
 	default:
 		return "unknown"
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsImpl(s, substr))
-}
-
-func containsImpl(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
