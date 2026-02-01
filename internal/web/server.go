@@ -124,10 +124,10 @@ func (s *Server) Start() error {
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 
-	// Routes
+	// Routes - GET endpoints are read-only, POST endpoints can trigger crawls
 	mux.HandleFunc("GET /", s.handleIndex)
-	mux.HandleFunc("POST /inspect", s.handleInspect)
-	mux.HandleFunc("POST /refresh", s.handleRefresh)
+	mux.HandleFunc("POST /inspect", s.wrapWithOriginCheck(s.handleInspect))
+	mux.HandleFunc("POST /refresh", s.wrapWithOriginCheck(s.handleRefresh))
 	mux.HandleFunc("GET /cert/{hash}", s.handleCertDetails)
 
 	// Wrap with security headers middleware
@@ -151,6 +151,44 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	return s.httpServer.Shutdown(ctx)
+}
+
+// wrapWithOriginCheck wraps a handler with cross-site request protection.
+// This prevents cross-site requests from triggering crawls by checking
+// Origin and Sec-Fetch-Site headers.
+func (s *Server) wrapWithOriginCheck(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Check Sec-Fetch-Site header (modern browsers)
+		secFetchSite := r.Header.Get("Sec-Fetch-Site")
+		if secFetchSite != "" && secFetchSite != "same-origin" && secFetchSite != "same-site" && secFetchSite != "none" {
+			s.logger.Warn("cross-site request blocked", "sec-fetch-site", secFetchSite, "path", r.URL.Path)
+			http.Error(w, "Cross-site requests are not allowed", http.StatusForbidden)
+			return
+		}
+
+		// Check Origin header if present
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			// Get the host from the request
+			host := r.Host
+			if host == "" {
+				host = r.URL.Host
+			}
+
+			// Build expected origins (http and https)
+			expectedHTTP := "http://" + host
+			expectedHTTPS := "https://" + host
+
+			// Allow if origin matches either scheme
+			if origin != expectedHTTP && origin != expectedHTTPS {
+				s.logger.Warn("cross-origin request blocked", "origin", origin, "host", host, "path", r.URL.Path)
+				http.Error(w, "Cross-origin requests are not allowed", http.StatusForbidden)
+				return
+			}
+		}
+
+		handler(w, r)
+	}
 }
 
 // securityHeadersMiddleware adds security headers to all responses.

@@ -106,8 +106,9 @@ func TestHandleIndex(t *testing.T) {
 		t.Error("Expected page to contain 'Cert Observatory'")
 	}
 
-	if !strings.Contains(body, "csrf_token") {
-		t.Error("Expected page to contain CSRF token")
+	// Ensure no CSRF token is present (removed per requirements)
+	if strings.Contains(body, "csrf_token") {
+		t.Error("Page should not contain CSRF token field")
 	}
 
 	if !strings.Contains(body, "UnitVectorY Labs") {
@@ -128,14 +129,13 @@ func TestHandleInspect_ValidDomain(t *testing.T) {
 		t.Fatalf("Failed to create server: %v", err)
 	}
 
-	// Create request with form data
+	// Create request with form data (no CSRF needed)
 	form := url.Values{}
 	form.Set("domain", "github.com")
-	form.Set("csrf_token", "test-token")
 
 	req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-token"})
+	req.Host = "localhost:8080"
 
 	w := httptest.NewRecorder()
 	server.handleInspect(w, req)
@@ -170,11 +170,10 @@ func TestHandleInspect_InvalidDomain(t *testing.T) {
 
 			form := url.Values{}
 			form.Set("domain", tt.domain)
-			form.Set("csrf_token", "test-token")
 
 			req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-token"})
+			req.Host = "localhost:8080"
 
 			w := httptest.NewRecorder()
 			server.handleInspect(w, req)
@@ -187,7 +186,69 @@ func TestHandleInspect_InvalidDomain(t *testing.T) {
 	}
 }
 
-func TestHandleInspect_CSRFRequired(t *testing.T) {
+func TestOriginValidation_CrossOrigin(t *testing.T) {
+	repo := &mockRepository{
+		canStandard:  true,
+		canForced:    true,
+		lockAcquired: true,
+	}
+	crawler := &mockCrawler{}
+
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("domain", "github.com")
+
+	// Test cross-origin request (should be blocked)
+	req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://evil.com")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	handler := server.wrapWithOriginCheck(server.handleInspect)
+	handler(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("Expected status 403 for cross-origin request, got %d", w.Code)
+	}
+}
+
+func TestOriginValidation_SameOrigin(t *testing.T) {
+	repo := &mockRepository{
+		canStandard:  true,
+		canForced:    true,
+		lockAcquired: true,
+	}
+	crawler := &mockCrawler{}
+
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("domain", "github.com")
+
+	// Test same-origin request (should be allowed)
+	req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://localhost:8080")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	handler := server.wrapWithOriginCheck(server.handleInspect)
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200 for same-origin request, got %d", w.Code)
+	}
+}
+
+func TestOriginValidation_SecFetchSite(t *testing.T) {
 	repo := &mockRepository{}
 	crawler := &mockCrawler{}
 
@@ -198,21 +259,19 @@ func TestHandleInspect_CSRFRequired(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("domain", "github.com")
-	// No CSRF token
 
+	// Test cross-site request via Sec-Fetch-Site header
 	req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Host = "localhost:8080"
 
 	w := httptest.NewRecorder()
-	server.handleInspect(w, req)
+	handler := server.wrapWithOriginCheck(server.handleInspect)
+	handler(w, req)
 
 	if w.Code != http.StatusForbidden {
-		t.Errorf("Expected status 403 for missing CSRF, got %d", w.Code)
-	}
-
-	body := w.Body.String()
-	if !strings.Contains(body, "Security Error") {
-		t.Error("Expected security error message")
+		t.Errorf("Expected status 403 for cross-site Sec-Fetch-Site, got %d", w.Code)
 	}
 }
 
@@ -243,11 +302,10 @@ func TestHandleInspect_CachedResult(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("domain", "github.com")
-	form.Set("csrf_token", "test-token")
 
 	req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-token"})
+	req.Host = "localhost:8080"
 
 	w := httptest.NewRecorder()
 	server.handleInspect(w, req)
@@ -276,11 +334,10 @@ func TestHandleRefresh_NotAllowed(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("domain", "github.com")
-	form.Set("csrf_token", "test-token")
 
 	req := httptest.NewRequest(http.MethodPost, "/refresh", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "test-token"})
+	req.Host = "localhost:8080"
 
 	w := httptest.NewRecorder()
 	server.handleRefresh(w, req)

@@ -75,7 +75,6 @@ type CertViewData struct {
 // ResultsViewData is the view model for the results template.
 type ResultsViewData struct {
 	Domain             string
-	CSRFToken          string
 	IsCached           bool
 	CacheAge           string
 	CanForceRefresh    bool
@@ -263,10 +262,9 @@ func parsePEM(pem string) (*x509.Certificate, error) {
 	return info.Parsed, nil
 }
 
-func buildResultsViewData(result *DomainResult, csrfToken string, isCached bool, canForce bool, waitTime time.Duration, lastCrawlFailed bool) *ResultsViewData {
+func buildResultsViewData(result *DomainResult, isCached bool, canForce bool, waitTime time.Duration, lastCrawlFailed bool) *ResultsViewData {
 	data := &ResultsViewData{
 		Domain:          result.Domain,
-		CSRFToken:       csrfToken,
 		IsCached:        isCached,
 		CanForceRefresh: canForce,
 		LastCrawlFailed: lastCrawlFailed,

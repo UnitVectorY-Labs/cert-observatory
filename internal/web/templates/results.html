@@ -14,7 +14,6 @@
     <div>
         {{if .CanForceRefresh}}
         <form style="display: inline" hx-post="/refresh" hx-target="#results" hx-indicator="#refresh-loading">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input type="hidden" name="domain" value="{{.Domain}}">
             <button type="submit" class="btn btn-secondary">
                 <span id="refresh-loading" class="htmx-indicator spinner"></span>
@@ -36,7 +35,7 @@
                  hx-get="/cert/{{$cert.HashHex}}"
                  hx-target="#cert-details"
                  hx-swap="innerHTML"
-                 onclick="selectCert(this)">>
+                 onclick="selectCert(this)">
                 <div class="chain-position">
                     {{if eq $index 0}}Leaf Certificate{{else if $cert.IsCA}}Intermediate CA{{else}}Certificate {{$index}}{{end}}
                 </div>

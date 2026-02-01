@@ -12,47 +12,19 @@ import (
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/domain"
 )
 
-// handleIndex serves the main page.
+// handleIndex serves the main page (GET only, read-only, never triggers crawl).
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	// Generate CSRF token
-	csrfToken := generateCSRFToken()
-
-	data := struct {
-		CSRFToken string
-	}{
-		CSRFToken: csrfToken,
-	}
-
-	// Set CSRF cookie
-	// Note: Secure flag should be true in production (behind HTTPS)
-	// For local development without TLS, it needs to be false
-	http.SetCookie(w, &http.Cookie{
-		Name:     "csrf_token",
-		Value:    csrfToken,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r.TLS != nil, // Set Secure flag when behind TLS
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   3600,
-	})
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.templates.ExecuteTemplate(w, "index.html", data); err != nil {
+	if err := s.templates.ExecuteTemplate(w, "index.html", nil); err != nil {
 		s.logger.Error("failed to render index", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
-// handleInspect handles domain inspection requests.
+// handleInspect handles domain inspection requests (POST only, can trigger crawl).
 func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.renderError(w, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
-		return
-	}
-
-	// Validate CSRF token
-	if !s.validateCSRF(r) {
-		s.renderError(w, "Security Error", "Invalid or missing security token. Please refresh the page.", http.StatusForbidden)
 		return
 	}
 
@@ -69,9 +41,6 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get CSRF token for response
-	csrfToken := getCSRFFromCookie(r)
-
 	// Check if we need to crawl or can use cached data
 	canRefresh, _, err := s.repo.CanStandardRefresh(r.Context(), normalizedDomain, s.config.StandardRefreshWindow)
 	if err != nil {
@@ -83,7 +52,7 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil && domainResult != nil && domainResult.HasChain && !canRefresh {
 		// Use cached data
-		s.renderCachedResults(w, r, domainResult, csrfToken, false)
+		s.renderCachedResults(w, r, domainResult, false)
 		return
 	}
 
@@ -94,7 +63,7 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 
 		// If we have cached data, show it with an error notice
 		if domainResult != nil && domainResult.HasChain {
-			s.renderCachedResultsWithError(w, r, domainResult, csrfToken, crawlErr)
+			s.renderCachedResultsWithError(w, r, domainResult, crawlErr)
 			return
 		}
 
@@ -103,19 +72,13 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Render fresh results
-	s.renderFreshResults(w, r, result, csrfToken)
+	s.renderFreshResults(w, r, result)
 }
 
-// handleRefresh handles force refresh requests.
+// handleRefresh handles force refresh requests (POST only, can trigger crawl).
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.renderError(w, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
-		return
-	}
-
-	// Validate CSRF token
-	if !s.validateCSRF(r) {
-		s.renderError(w, "Security Error", "Invalid or missing security token. Please refresh the page.", http.StatusForbidden)
 		return
 	}
 
@@ -125,8 +88,6 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
 		return
 	}
-
-	csrfToken := getCSRFFromCookie(r)
 
 	// Check if forced refresh is allowed
 	canForce, waitTime, err := s.repo.CanForcedRefresh(r.Context(), normalizedDomain, s.config.ForcedRefreshWindow)
@@ -149,7 +110,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		// Try to get cached data
 		domainResult, _ := s.repo.GetDomainWithChain(r.Context(), normalizedDomain)
 		if domainResult != nil && domainResult.HasChain {
-			s.renderCachedResultsWithError(w, r, domainResult, csrfToken, crawlErr)
+			s.renderCachedResultsWithError(w, r, domainResult, crawlErr)
 			return
 		}
 
@@ -157,7 +118,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.renderFreshResults(w, r, result, csrfToken)
+	s.renderFreshResults(w, r, result)
 }
 
 // handleCertDetails returns certificate details for a specific cert.
@@ -252,16 +213,6 @@ func (s *Server) performCrawl(ctx context.Context, domainName string, forced boo
 	return result, nil
 }
 
-// validateCSRF validates the CSRF token.
-func (s *Server) validateCSRF(r *http.Request) bool {
-	formToken := r.FormValue("csrf_token")
-	cookie, err := r.Cookie("csrf_token")
-	if err != nil {
-		return false
-	}
-	return formToken != "" && formToken == cookie.Value
-}
-
 // renderError renders an error message.
 func (s *Server) renderError(w http.ResponseWriter, title, message string, status int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -283,10 +234,10 @@ func (s *Server) renderError(w http.ResponseWriter, title, message string, statu
 }
 
 // renderCachedResults renders cached results.
-func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, result *DomainResult, csrfToken string, lastCrawlFailed bool) {
+func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, result *DomainResult, lastCrawlFailed bool) {
 	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
 
-	data := buildResultsViewData(result, csrfToken, true, canForce, waitTime, lastCrawlFailed)
+	data := buildResultsViewData(result, true, canForce, waitTime, lastCrawlFailed)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
@@ -296,12 +247,12 @@ func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, res
 }
 
 // renderCachedResultsWithError renders cached results with an error notice.
-func (s *Server) renderCachedResultsWithError(w http.ResponseWriter, r *http.Request, result *DomainResult, csrfToken string, crawlErr error) {
-	s.renderCachedResults(w, r, result, csrfToken, true)
+func (s *Server) renderCachedResultsWithError(w http.ResponseWriter, r *http.Request, result *DomainResult, crawlErr error) {
+	s.renderCachedResults(w, r, result, true)
 }
 
 // renderFreshResults renders fresh crawl results.
-func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, result *CrawlOutput, csrfToken string) {
+func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, result *CrawlOutput) {
 	// Convert crawl output to domain result format
 	domainResult := &DomainResult{
 		Domain:    result.Domain,
@@ -312,7 +263,7 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 
 	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
 
-	data := buildResultsViewData(domainResult, csrfToken, false, canForce, waitTime, false)
+	data := buildResultsViewData(domainResult, false, canForce, waitTime, false)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
@@ -323,16 +274,6 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 
 // Helper functions
 
-func generateCSRFToken() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		// This should never happen with crypto/rand, but handle gracefully
-		// Use a timestamp-based fallback
-		b = []byte(fmt.Sprintf("%x", time.Now().UnixNano()))
-	}
-	return hex.EncodeToString(b)
-}
-
 func generateLockID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -341,14 +282,6 @@ func generateLockID() string {
 		b = []byte(fmt.Sprintf("%x", time.Now().UnixNano()))
 	}
 	return hex.EncodeToString(b)
-}
-
-func getCSRFFromCookie(r *http.Request) string {
-	cookie, err := r.Cookie("csrf_token")
-	if err != nil {
-		return generateCSRFToken()
-	}
-	return cookie.Value
 }
 
 func isIPLiteral(s string) bool {

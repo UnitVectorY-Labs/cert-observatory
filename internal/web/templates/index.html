@@ -21,7 +21,6 @@
         </div>
 
         <form class="search-form" hx-post="/inspect" hx-target="#results" hx-indicator="#loading">
-            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <input 
                 type="text" 
                 name="domain" 
