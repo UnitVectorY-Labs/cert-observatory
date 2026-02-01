@@ -24,11 +24,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set CSRF cookie
+	// Note: Secure flag should be true in production (behind HTTPS)
+	// For local development without TLS, it needs to be false
 	http.SetCookie(w, &http.Cookie{
 		Name:     "csrf_token",
 		Value:    csrfToken,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   r.TLS != nil, // Set Secure flag when behind TLS
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   3600,
 	})
