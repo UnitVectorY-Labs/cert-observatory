@@ -93,6 +93,12 @@
                 });
             }
         }
+
+        // Select certificate in chain (for styling)
+        function selectCert(element) {
+            document.querySelectorAll('.chain-item').forEach(e => e.classList.remove('selected'));
+            element.classList.add('selected');
+        }
     </script>
 </body>
 </html>

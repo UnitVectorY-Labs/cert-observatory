@@ -322,13 +322,21 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 
 func generateCSRFToken() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// This should never happen with crypto/rand, but handle gracefully
+		// Use a timestamp-based fallback
+		b = []byte(fmt.Sprintf("%x", time.Now().UnixNano()))
+	}
 	return hex.EncodeToString(b)
 }
 
 func generateLockID() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// This should never happen with crypto/rand, but handle gracefully
+		// Use a timestamp-based fallback
+		b = []byte(fmt.Sprintf("%x", time.Now().UnixNano()))
+	}
 	return hex.EncodeToString(b)
 }
 

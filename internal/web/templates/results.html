@@ -36,7 +36,7 @@
                  hx-get="/cert/{{$cert.HashHex}}"
                  hx-target="#cert-details"
                  hx-swap="innerHTML"
-                 onclick="document.querySelectorAll('.chain-item').forEach(e => e.classList.remove('selected')); this.classList.add('selected');">
+                 onclick="selectCert(this)">>
                 <div class="chain-position">
                     {{if eq $index 0}}Leaf Certificate{{else if $cert.IsCA}}Intermediate CA{{else}}Certificate {{$index}}{{end}}
                 </div>

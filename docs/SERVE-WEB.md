@@ -62,7 +62,7 @@ cert-observatory serve-web --db-host db.example.com --db-user certuser
 The server enforces rate limiting to prevent abuse:
 
 - **Standard refresh**: Returns cached data if the last successful crawl was within 23 hours
-- **Force refresh**: Allows one forced refresh per gating window when policy permits
+- **Force refresh**: Allows one forced refresh per 1-hour window when policy permits
 
 Force refresh is only available when server-side policy allows it.
 
