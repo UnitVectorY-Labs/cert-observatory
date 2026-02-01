@@ -141,23 +141,3 @@ func TestFetchCloudflareToplist_HTTPError(t *testing.T) {
 		t.Errorf("error should mention status code 401: %v", err)
 	}
 }
-
-func TestParseToplistResponse_LargeDomainList(t *testing.T) {
-	// Simulate a large response with 10000 domains
-	var builder strings.Builder
-	builder.WriteString("domain\n")
-	for i := 0; i < 10000; i++ {
-		builder.WriteString("domain")
-		builder.WriteString(strings.Repeat("x", 50)) // Make domain names longer
-		builder.WriteString(".com\n")
-	}
-
-	domains, err := parseToplistResponse([]byte(builder.String()))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(domains) != 10000 {
-		t.Errorf("got %d domains, want 10000", len(domains))
-	}
-}

@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	// CloudflareRadarToplistURL is the URL for Cloudflare Radar Top 10k domains.
-	CloudflareRadarToplistURL = "https://api.cloudflare.com/client/v4/radar/datasets/ranking_top_10000"
+	// CloudflareRadarToplistURL is the URL for Cloudflare Radar Top 1k domains.
+	CloudflareRadarToplistURL = "https://api.cloudflare.com/client/v4/radar/datasets/ranking_top_1000"
 )
 
 // IngestToplistConfig contains configuration for the ingest-toplist command.
@@ -137,18 +137,38 @@ func IngestToplist(ctx context.Context, cfg *IngestToplistConfig) error {
 		return nil
 	}
 
-	// Bulk upsert domains
-	inserted, updated, err := repo.BulkUpsertDomainsFromToplist(ctx, validDomains)
-	if err != nil {
-		logger.Error("failed to upsert domains", "error", err)
-		return fmt.Errorf("upsert domains: %w", err)
+	// Bulk upsert domains in sequential batches to avoid huge single transactions.
+	batchSize := 100
+	totalInserted := 0
+	totalUpdated := 0
+
+	for i := 0; i < len(validDomains); i += batchSize {
+		end := i + batchSize
+		if end > len(validDomains) {
+			end = len(validDomains)
+		}
+		batch := validDomains[i:end]
+		batchNum := i/batchSize + 1
+
+		logger.Info("upserting domain batch", "batch", batchNum, "size", len(batch))
+
+		inserted, updated, err := repo.BulkUpsertDomainsFromToplist(ctx, batch)
+		if err != nil {
+			logger.Error("failed to upsert domains batch", "batch", batchNum, "error", err)
+			return fmt.Errorf("upsert domains batch %d: %w", batchNum, err)
+		}
+
+		totalInserted += inserted
+		totalUpdated += updated
+
+		logger.Info("completed batch upsert", "batch", batchNum, "inserted", inserted, "updated", updated)
 	}
 
 	logger.Info("ingest-toplist completed",
 		"fetched", len(rawDomains),
 		"accepted", len(validDomains),
-		"inserted", inserted,
-		"updated", updated,
+		"inserted", totalInserted,
+		"updated", totalUpdated,
 		"rejected", rejected,
 	)
 

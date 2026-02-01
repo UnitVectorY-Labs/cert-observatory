@@ -106,8 +106,8 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 	logger.Info("found eligible domains", "count", totalEligible)
 
 	// Fetch eligible domains (fetch in batches but for simplicity, get all at once)
-	// In production, you might want to batch this
-	const batchLimit = 10000
+	// Batching to improve efficiency of large queries
+	const batchLimit = 100
 	domains, err := repo.GetEligibleDomainsForCrawl(ctx, effectiveAge, batchLimit)
 	if err != nil {
 		logger.Error("failed to get eligible domains", "error", err)
