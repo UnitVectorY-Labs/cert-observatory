@@ -22,8 +22,6 @@ Recommended transaction pattern:
 - Upsert or roll domain_chain_states current interval
 */
 
-BEGIN;
-
 ----------------------------
 -- Types
 ----------------------------
