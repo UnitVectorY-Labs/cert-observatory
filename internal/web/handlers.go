@@ -1,0 +1,415 @@
+package web
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/UnitVectorY-Labs/cert-observatory/internal/domain"
+)
+
+// handleIndex serves the main page.
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	// Generate CSRF token
+	csrfToken := generateCSRFToken()
+
+	data := struct {
+		CSRFToken string
+	}{
+		CSRFToken: csrfToken,
+	}
+
+	// Set CSRF cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "csrf_token",
+		Value:    csrfToken,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   3600,
+	})
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.templates.ExecuteTemplate(w, "index.html", data); err != nil {
+		s.logger.Error("failed to render index", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleInspect handles domain inspection requests.
+func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		s.renderError(w, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
+		return
+	}
+
+	// Validate CSRF token
+	if !s.validateCSRF(r) {
+		s.renderError(w, "Security Error", "Invalid or missing security token. Please refresh the page.", http.StatusForbidden)
+		return
+	}
+
+	rawDomain := r.FormValue("domain")
+	normalizedDomain, err := domain.NormalizeAndValidate(rawDomain)
+	if err != nil {
+		s.renderError(w, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
+		return
+	}
+
+	// Check for IP literals (SSRF prevention)
+	if isIPLiteral(normalizedDomain) {
+		s.renderError(w, "Invalid Domain", "IP addresses are not allowed. Please enter a domain name.", http.StatusBadRequest)
+		return
+	}
+
+	// Get CSRF token for response
+	csrfToken := getCSRFFromCookie(r)
+
+	// Check if we need to crawl or can use cached data
+	canRefresh, _, err := s.repo.CanStandardRefresh(r.Context(), normalizedDomain, s.config.StandardRefreshWindow)
+	if err != nil {
+		s.logger.Error("failed to check refresh eligibility", "domain", normalizedDomain, "error", err)
+	}
+
+	// Try to get existing data first
+	domainResult, err := s.repo.GetDomainWithChain(r.Context(), normalizedDomain)
+
+	if err == nil && domainResult != nil && domainResult.HasChain && !canRefresh {
+		// Use cached data
+		s.renderCachedResults(w, r, domainResult, csrfToken, false)
+		return
+	}
+
+	// Need to crawl
+	result, crawlErr := s.performCrawl(r.Context(), normalizedDomain, false)
+	if crawlErr != nil {
+		s.logger.Warn("crawl failed", "domain", normalizedDomain, "error", crawlErr)
+
+		// If we have cached data, show it with an error notice
+		if domainResult != nil && domainResult.HasChain {
+			s.renderCachedResultsWithError(w, r, domainResult, csrfToken, crawlErr)
+			return
+		}
+
+		s.renderError(w, "Crawl Failed", formatCrawlError(crawlErr), http.StatusOK)
+		return
+	}
+
+	// Render fresh results
+	s.renderFreshResults(w, r, result, csrfToken)
+}
+
+// handleRefresh handles force refresh requests.
+func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		s.renderError(w, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
+		return
+	}
+
+	// Validate CSRF token
+	if !s.validateCSRF(r) {
+		s.renderError(w, "Security Error", "Invalid or missing security token. Please refresh the page.", http.StatusForbidden)
+		return
+	}
+
+	rawDomain := r.FormValue("domain")
+	normalizedDomain, err := domain.NormalizeAndValidate(rawDomain)
+	if err != nil {
+		s.renderError(w, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
+		return
+	}
+
+	csrfToken := getCSRFFromCookie(r)
+
+	// Check if forced refresh is allowed
+	canForce, waitTime, err := s.repo.CanForcedRefresh(r.Context(), normalizedDomain, s.config.ForcedRefreshWindow)
+	if err != nil {
+		s.logger.Error("failed to check forced refresh eligibility", "domain", normalizedDomain, "error", err)
+		s.renderError(w, "Error", "Could not verify refresh eligibility.", http.StatusInternalServerError)
+		return
+	}
+
+	if !canForce {
+		s.renderError(w, "Refresh Not Available", fmt.Sprintf("Force refresh will be available in %s.", formatDuration(waitTime)), http.StatusTooManyRequests)
+		return
+	}
+
+	// Perform forced crawl
+	result, crawlErr := s.performCrawl(r.Context(), normalizedDomain, true)
+	if crawlErr != nil {
+		s.logger.Warn("forced crawl failed", "domain", normalizedDomain, "error", crawlErr)
+
+		// Try to get cached data
+		domainResult, _ := s.repo.GetDomainWithChain(r.Context(), normalizedDomain)
+		if domainResult != nil && domainResult.HasChain {
+			s.renderCachedResultsWithError(w, r, domainResult, csrfToken, crawlErr)
+			return
+		}
+
+		s.renderError(w, "Crawl Failed", formatCrawlError(crawlErr), http.StatusOK)
+		return
+	}
+
+	s.renderFreshResults(w, r, result, csrfToken)
+}
+
+// handleCertDetails returns certificate details for a specific cert.
+func (s *Server) handleCertDetails(w http.ResponseWriter, r *http.Request) {
+	hashHex := r.PathValue("hash")
+	if hashHex == "" {
+		http.Error(w, "Missing certificate hash", http.StatusBadRequest)
+		return
+	}
+
+	hash, err := hex.DecodeString(hashHex)
+	if err != nil || len(hash) != 32 {
+		http.Error(w, "Invalid certificate hash", http.StatusBadRequest)
+		return
+	}
+
+	cert, err := s.repo.GetCertificateByHash(r.Context(), hash)
+	if err != nil {
+		s.logger.Error("failed to get certificate", "hash", hashHex, "error", err)
+		http.Error(w, "Certificate not found", http.StatusNotFound)
+		return
+	}
+
+	viewData := certToViewData(cert)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.templates.ExecuteTemplate(w, "cert_details", viewData); err != nil {
+		s.logger.Error("failed to render cert details", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// performCrawl executes a crawl with locking.
+func (s *Server) performCrawl(ctx context.Context, domainName string, forced bool) (*CrawlOutput, error) {
+	lockID := generateLockID()
+	lockTTL := s.config.CrawlTimeout + 10*time.Second
+
+	// Try to acquire lock
+	acquired, err := s.repo.AcquireLock(ctx, domainName, lockID, lockTTL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire lock: %w", err)
+	}
+
+	if !acquired {
+		// Another crawl is in progress, wait a bit and try to get cached results
+		time.Sleep(2 * time.Second)
+		domainResult, err := s.repo.GetDomainWithChain(ctx, domainName)
+		if err == nil && domainResult != nil && domainResult.HasChain {
+			// Return the cached data as if it was a fresh crawl
+			return &CrawlOutput{
+				Domain: domainName,
+				Chain:  domainResult.Chain,
+			}, nil
+		}
+		return nil, fmt.Errorf("another crawl in progress")
+	}
+
+	// Ensure lock is released
+	defer func() {
+		if err := s.repo.ReleaseLock(ctx, domainName, lockID); err != nil {
+			s.logger.Warn("failed to release lock", "domain", domainName, "error", err)
+		}
+	}()
+
+	// Create context with timeout
+	crawlCtx, cancel := context.WithTimeout(ctx, s.config.CrawlTimeout)
+	defer cancel()
+
+	// Perform crawl
+	result, err := s.crawler.Crawl(crawlCtx, domainName)
+	if err != nil {
+		// Record failure
+		s.repo.RecordCrawlResult(ctx, &CrawlResultInput{
+			Domain:  domainName,
+			Success: false,
+			Forced:  forced,
+		})
+		return nil, err
+	}
+
+	// Record success
+	if err := s.repo.RecordCrawlResult(ctx, &CrawlResultInput{
+		Domain:  domainName,
+		Success: true,
+		Forced:  forced,
+		Chain:   result.Chain,
+	}); err != nil {
+		s.logger.Error("failed to record crawl result", "domain", domainName, "error", err)
+		// Don't fail the request, we still have the result
+	}
+
+	return result, nil
+}
+
+// validateCSRF validates the CSRF token.
+func (s *Server) validateCSRF(r *http.Request) bool {
+	formToken := r.FormValue("csrf_token")
+	cookie, err := r.Cookie("csrf_token")
+	if err != nil {
+		return false
+	}
+	return formToken != "" && formToken == cookie.Value
+}
+
+// renderError renders an error message.
+func (s *Server) renderError(w http.ResponseWriter, title, message string, status int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+
+	data := struct {
+		Title            string
+		Message          string
+		HasCachedResults bool
+	}{
+		Title:   title,
+		Message: message,
+	}
+
+	if err := s.templates.ExecuteTemplate(w, "error", data); err != nil {
+		s.logger.Error("failed to render error template", "error", err)
+		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", title, message)
+	}
+}
+
+// renderCachedResults renders cached results.
+func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, result *DomainResult, csrfToken string, lastCrawlFailed bool) {
+	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
+
+	data := buildResultsViewData(result, csrfToken, true, canForce, waitTime, lastCrawlFailed)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
+		s.logger.Error("failed to render results", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// renderCachedResultsWithError renders cached results with an error notice.
+func (s *Server) renderCachedResultsWithError(w http.ResponseWriter, r *http.Request, result *DomainResult, csrfToken string, crawlErr error) {
+	s.renderCachedResults(w, r, result, csrfToken, true)
+}
+
+// renderFreshResults renders fresh crawl results.
+func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, result *CrawlOutput, csrfToken string) {
+	// Convert crawl output to domain result format
+	domainResult := &DomainResult{
+		Domain:    result.Domain,
+		HasChain:  len(result.Chain) > 0,
+		Chain:     result.Chain,
+		UpdatedAt: time.Now(),
+	}
+
+	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
+
+	data := buildResultsViewData(domainResult, csrfToken, false, canForce, waitTime, false)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
+		s.logger.Error("failed to render results", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// Helper functions
+
+func generateCSRFToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func generateLockID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func getCSRFFromCookie(r *http.Request) string {
+	cookie, err := r.Cookie("csrf_token")
+	if err != nil {
+		return generateCSRFToken()
+	}
+	return cookie.Value
+}
+
+func isIPLiteral(s string) bool {
+	// Check for IPv4
+	parts := strings.Split(s, ".")
+	if len(parts) == 4 {
+		allDigits := true
+		for _, part := range parts {
+			for _, c := range part {
+				if c < '0' || c > '9' {
+					allDigits = false
+					break
+				}
+			}
+		}
+		if allDigits {
+			return true
+		}
+	}
+
+	// Check for IPv6 (contains colons, but domain validation already rejects these)
+	return strings.Contains(s, ":")
+}
+
+func formatDomainError(err error) string {
+	switch err {
+	case domain.ErrEmptyDomain:
+		return "Please enter a domain name."
+	case domain.ErrDomainTooLong:
+		return "Domain name is too long (maximum 253 characters)."
+	case domain.ErrDomainHasScheme:
+		return "Please enter just the domain name without http:// or https://."
+	case domain.ErrDomainHasPort:
+		return "Please enter just the domain name without a port number."
+	case domain.ErrDomainHasPath:
+		return "Please enter just the domain name without any path."
+	case domain.ErrDomainHasQuery:
+		return "Please enter just the domain name without query parameters."
+	case domain.ErrDomainInvalidChars:
+		return "Domain contains invalid characters."
+	default:
+		return "Invalid domain name format."
+	}
+}
+
+func formatCrawlError(err error) string {
+	errStr := err.Error()
+	if strings.Contains(errStr, "tcp connect") {
+		return "Connection failed. The server may be unreachable."
+	}
+	if strings.Contains(errStr, "tls handshake") {
+		return "TLS handshake failed. The server may not support TLS on port 443."
+	}
+	if strings.Contains(errStr, "no certificates") {
+		return "No certificates were returned by the server."
+	}
+	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline") {
+		return "Connection timed out."
+	}
+	return "Failed to retrieve certificate chain."
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%d seconds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+	}
+	hours := int(d.Hours())
+	if hours == 1 {
+		return "1 hour"
+	}
+	return fmt.Sprintf("%d hours", hours)
+}

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cert Observatory</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <meta name="description" content="Inspect TLS certificate chains for any domain">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🔐 Cert Observatory</h1>
+            <p>Retrieve and inspect TLS certificate chains for any domain. The retrieval is done server-side, so results may differ from your local view if a different certificate is served or there is a man-in-the-middle.</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="instructions">
+            <strong>How it works:</strong> Enter a domain name below. We perform a TLS handshake on port 443 to capture the certificate chain. No HTTP requests are made, no redirects are followed.
+        </div>
+
+        <form class="search-form" hx-post="/inspect" hx-target="#results" hx-indicator="#loading">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input 
+                type="text" 
+                name="domain" 
+                class="search-input" 
+                placeholder="Enter domain (e.g., github.com)" 
+                maxlength="253"
+                required
+                autocomplete="off"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+            >
+            <button type="submit" class="btn btn-primary">
+                <span class="htmx-indicator spinner"></span>
+                Inspect
+            </button>
+        </form>
+
+        <div id="loading" class="htmx-indicator">
+            <div class="results-container">
+                <div class="chain-pane">
+                    <h3>Certificate Chain</h3>
+                    <div class="chain-list">
+                        <div class="skeleton skeleton-block"></div>
+                    </div>
+                </div>
+                <div class="details-pane">
+                    <h3>Certificate Details</h3>
+                    <div class="details-content">
+                        <div class="skeleton skeleton-line" style="width: 60%"></div>
+                        <div class="skeleton skeleton-line" style="width: 80%"></div>
+                        <div class="skeleton skeleton-line" style="width: 40%"></div>
+                        <div class="skeleton skeleton-block" style="margin-top: 1rem"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="results">
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                </svg>
+                <p>Enter a domain above to inspect its TLS certificate chain</p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>
+                <a href="https://github.com/UnitVectorY-Labs">UnitVectorY Labs</a> | 
+                <a href="https://opensource.org/licenses/MIT">MIT License</a> | 
+                <a href="https://github.com/UnitVectorY-Labs/cert-observatory"><strong>cert-observatory</strong> on GitHub</a>
+            </p>
+        </div>
+    </footer>
+
+    <script src="/static/js/htmx.min.js"></script>
+    <script>
+        // Copy PEM to clipboard
+        function copyPEM(button, certHash) {
+            const pemBlock = document.getElementById('pem-' + certHash);
+            if (pemBlock) {
+                navigator.clipboard.writeText(pemBlock.textContent).then(() => {
+                    const originalText = button.textContent;
+                    button.textContent = 'Copied!';
+                    setTimeout(() => { button.textContent = originalText; }, 1500);
+                });
+            }
+        }
+    </script>
+</body>
+</html>

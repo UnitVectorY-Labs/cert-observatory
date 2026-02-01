@@ -1,0 +1,109 @@
+{{define "cert_details"}}
+<div class="detail-grid">
+    <div class="detail-section">
+        <div class="detail-label">Subject</div>
+        <div class="detail-value">{{.SubjectDN}}</div>
+    </div>
+    <div class="detail-section">
+        <div class="detail-label">Issuer</div>
+        <div class="detail-value">{{.IssuerDN}}</div>
+    </div>
+</div>
+
+<div class="detail-grid">
+    <div class="detail-section">
+        <div class="detail-label">Not Before</div>
+        <div class="detail-value {{if .IsNotYetValid}}validity-future{{else}}validity-valid{{end}}">
+            {{.NotBeforeFormatted}}
+        </div>
+    </div>
+    <div class="detail-section">
+        <div class="detail-label">Not After</div>
+        <div class="detail-value {{if .IsExpired}}validity-expired{{else}}validity-valid{{end}}">
+            {{.NotAfterFormatted}}
+        </div>
+    </div>
+</div>
+
+<div class="detail-section">
+    <div class="detail-label">Serial Number</div>
+    <div class="detail-value mono">{{.SerialNumber}}</div>
+</div>
+
+{{if .SANs}}
+<div class="detail-section">
+    <div class="detail-label">Subject Alternative Names ({{len .SANs}})</div>
+    <ul class="san-list">
+        {{range .SANs}}
+        <li>{{.}}</li>
+        {{end}}
+    </ul>
+</div>
+{{end}}
+
+<div class="detail-grid">
+    <div class="detail-section">
+        <div class="detail-label">Signature Algorithm</div>
+        <div class="detail-value">{{.SignatureAlgorithm}}</div>
+    </div>
+    <div class="detail-section">
+        <div class="detail-label">Public Key</div>
+        <div class="detail-value">{{.PublicKeyInfo}}</div>
+    </div>
+</div>
+
+{{if or .IsCA .HasPathLenConstraint}}
+<div class="detail-section">
+    <div class="detail-label">Basic Constraints</div>
+    <div class="detail-value">
+        CA: {{if .IsCA}}Yes{{else}}No{{end}}
+        {{if .HasPathLenConstraint}}, Path Length: {{.PathLenConstraint}}{{end}}
+    </div>
+</div>
+{{end}}
+
+{{if .KeyUsage}}
+<div class="detail-section">
+    <div class="detail-label">Key Usage</div>
+    <div class="detail-value">{{.KeyUsage}}</div>
+</div>
+{{end}}
+
+{{if .ExtKeyUsage}}
+<div class="detail-section">
+    <div class="detail-label">Extended Key Usage</div>
+    <div class="detail-value">{{.ExtKeyUsage}}</div>
+</div>
+{{end}}
+
+<div class="detail-grid">
+    {{if .SKI}}
+    <div class="detail-section">
+        <div class="detail-label">Subject Key Identifier</div>
+        <div class="detail-value mono">{{.SKI}}</div>
+    </div>
+    {{end}}
+    {{if .AKI}}
+    <div class="detail-section">
+        <div class="detail-label">Authority Key Identifier</div>
+        <div class="detail-value mono">{{.AKI}}</div>
+    </div>
+    {{end}}
+</div>
+
+<div class="detail-section">
+    <div class="detail-label">Certificate Hash (SHA-256)</div>
+    <div class="detail-value mono">{{.HashHex}}</div>
+</div>
+
+{{if .PossibleIssuers}}
+<div class="detail-section">
+    <div class="detail-label">Possible Issuers</div>
+    <ul class="san-list">
+        {{range .PossibleIssuers}}
+        <li>{{.}}</li>
+        {{end}}
+    </ul>
+</div>
+{{end}}
+{{end}}

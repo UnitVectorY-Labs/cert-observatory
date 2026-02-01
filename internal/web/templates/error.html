@@ -1,0 +1,12 @@
+{{define "error"}}
+<div class="error-block">
+    <h4>{{.Title}}</h4>
+    <p>{{.Message}}</p>
+</div>
+{{if .HasCachedResults}}
+<p style="margin: 1rem 0; color: var(--text-secondary); font-size: 0.9rem;">
+    Showing cached results from previous successful crawl:
+</p>
+{{template "results" .CachedData}}
+{{end}}
+{{end}}
