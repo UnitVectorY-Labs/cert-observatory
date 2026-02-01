@@ -30,6 +30,7 @@ func rootCmd() *cobra.Command {
 	}
 
 	root.AddCommand(crawlDomainCmd())
+	root.AddCommand(migrateCmd())
 
 	return root
 }
@@ -119,4 +120,50 @@ func applyDBEnvDefaults(cfg *db.Config) {
 	if cfg.SSLMode == "" {
 		cfg.SSLMode = "disable"
 	}
+}
+
+func migrateCmd() *cobra.Command {
+	cfg := cmd.DefaultMigrateConfig()
+	cfg.DBConfig = &db.Config{}
+
+	c := &cobra.Command{
+		Use:   "migrate",
+		Short: "Manage database migrations",
+		Long:  "Run database migrations to keep the schema up to date.",
+	}
+
+	// Subcommand: up
+	upCmd := &cobra.Command{
+		Use:   "up",
+		Short: "Apply all pending migrations",
+		RunE: func(c *cobra.Command, args []string) error {
+			applyDBEnvDefaults(cfg.DBConfig)
+			return cmd.MigrateUp(context.Background(), cfg)
+		},
+	}
+
+	// Subcommand: status
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show current migration status",
+		RunE: func(c *cobra.Command, args []string) error {
+			applyDBEnvDefaults(cfg.DBConfig)
+			return cmd.MigrateStatus(context.Background(), cfg)
+		},
+	}
+
+	// Add database flags to both subcommands
+	for _, sub := range []*cobra.Command{upCmd, statusCmd} {
+		sub.Flags().StringVar(&cfg.DBConfig.Host, "db-host", "", "Database host (env: DB_HOST)")
+		sub.Flags().IntVar(&cfg.DBConfig.Port, "db-port", 0, "Database port (env: DB_PORT)")
+		sub.Flags().StringVar(&cfg.DBConfig.User, "db-user", "", "Database user (env: DB_USER)")
+		sub.Flags().StringVar(&cfg.DBConfig.Password, "db-password", "", "Database password (env: DB_PASSWORD)")
+		sub.Flags().StringVar(&cfg.DBConfig.Database, "db-name", "", "Database name (env: DB_NAME)")
+		sub.Flags().StringVar(&cfg.DBConfig.SSLMode, "db-sslmode", "", "Database SSL mode (env: DB_SSLMODE)")
+	}
+
+	c.AddCommand(upCmd)
+	c.AddCommand(statusCmd)
+
+	return c
 }
