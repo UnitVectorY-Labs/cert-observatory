@@ -1,6 +1,12 @@
-# Database Connection
+---
+layout: default
+title: Database
+nav_order: 5
+---
 
-All commands that interact with the database share a common set of connection parameters. These can be specified either via command-line flags or environment variables.
+# Database Schema
+
+The cert-observatory application uses PostgreSQL to store certificate data. This document describes the database tables and their relationships.
 
 ## Connection Parameters
 
@@ -13,91 +19,129 @@ All commands that interact with the database share a common set of connection pa
 | `--db-name` | `DB_NAME` | `cert_observatory` | Database name |
 | `--db-sslmode` | `DB_SSLMODE` | `disable` | SSL mode (`disable`, `require`, `verify-ca`, `verify-full`) |
 
-## Priority
-
 Command-line flags take precedence over environment variables. If neither is specified, the default value is used.
 
-## Connection String
+## Tables
 
-The application constructs a PostgreSQL connection string using the provided parameters:
+### certificates
 
-```
-host=<host> port=<port> user=<user> password=<password> dbname=<database> sslmode=<sslmode>
-```
+Immutable certificate catalog. One row per unique certificate, keyed by SHA-256 of DER bytes.
 
-## Example Usage
+| Column | Type | Description |
+|--------|------|-------------|
+| `cert_hash` | bytea (PK) | SHA-256 hash of DER-encoded certificate (32 bytes) |
+| `first_seen_at` | timestamptz | When this certificate was first seen |
+| `pem` | text | PEM-encoded certificate |
+| `not_before` | timestamptz | Certificate validity start time |
+| `not_after` | timestamptz | Certificate validity end time |
+| `ski` | bytea | Subject Key Identifier (if present) |
+| `aki` | bytea | Authority Key Identifier (if present) |
 
-### Using environment variables:
+### cert_signers
 
-```bash
-export DB_HOST=db.example.com
-export DB_PORT=5432
-export DB_USER=certuser
-export DB_PASSWORD=secret
-export DB_NAME=cert_observatory
+Many-to-many mapping of which certificates can sign which other certificates. Supports cross-signing analysis.
 
-cert-observatory crawl-domain --url example.com
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `subject_cert_hash` | bytea (PK) | Certificate being signed |
+| `issuer_cert_hash` | bytea (PK) | Certificate that signs the subject certificate |
+| `first_seen_at` | timestamptz | When this relationship was first observed |
+| `is_verified` | boolean | True if signature was cryptographically verified |
 
-### Using command-line flags:
+### chains
 
-```bash
-cert-observatory crawl-domain \
-  --url example.com \
-  --db-host db.example.com \
-  --db-port 5432 \
-  --db-user certuser \
-  --db-password secret \
-  --db-name cert_observatory
-```
+Deduplicated peer-provided chains. A chain is the ordered list returned by the server during TLS handshake.
 
-### Mixed usage (flags override environment variables):
+| Column | Type | Description |
+|--------|------|-------------|
+| `chain_hash` | bytea (PK) | SHA-256 of the ordered list of cert_hash values |
+| `created_at` | timestamptz | When this chain was first observed |
+| `leaf_cert_hash` | bytea | First certificate in the peer-provided chain |
+| `depth` | integer | Number of certificates in the chain (1-20) |
 
-```bash
-export DB_HOST=default-db.example.com
-export DB_USER=defaultuser
+### chain_certs
 
-cert-observatory crawl-domain --url example.com --db-host override-db.example.com
-# Uses override-db.example.com as host, but defaultuser as user
-```
+Ordered chain membership. Stores the exact peer-provided chain order.
 
-## Migrations
+| Column | Type | Description |
+|--------|------|-------------|
+| `chain_hash` | bytea (PK) | Reference to chains table |
+| `position` | smallint (PK) | 1-based position in the chain (1 = leaf) |
+| `cert_hash` | bytea | Reference to certificates table |
 
-Before running commands that interact with the database, ensure the database schema is up to date. All commands that require database access will check the migration version at startup and refuse to run if migrations are pending.
+### domains
 
-The `migrate` command can be used to apply pending migrations:
+Normalized domain targets (TLS SNI). Stores latest chain pointer, rate limit timestamps, and automated backoff state.
 
-```bash
-cert-observatory migrate up
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `domain_id` | bigserial (PK) | Auto-generated domain ID |
+| `domain` | text (unique) | Normalized domain (lowercase, no trailing dot) |
+| `first_seen_at` | timestamptz | When this domain was first seen |
+| `popular_domain` | boolean | True if domain appeared on imported popular list |
+| `auto_crawl` | boolean | True if automated crawling is enabled |
+| `current_chain_hash` | bytea | Latest successful chain_hash observed |
+| `current_chain_updated_at` | timestamptz | When current chain was last updated |
+| `last_standard_attempt_at` | timestamptz | Last standard crawl attempt time |
+| `last_standard_success_at` | timestamptz | Last successful standard crawl |
+| `last_forced_attempt_at` | timestamptz | Last forced refresh attempt time |
+| `last_forced_success_at` | timestamptz | Last successful forced refresh |
+| `last_success_at` | timestamptz | Last successful crawl (any mode) |
+| `last_failure_at` | timestamptz | Last failed crawl attempt |
+| `consecutive_failures` | integer | Count of consecutive failures |
+| `no_retry_before` | timestamptz | Automated crawling retry wait time |
 
-## Docker Compose Example
+### domain_chain_states
 
-For local development, a PostgreSQL instance can be started with Docker:
+History of unique chain states per domain stored as intervals.
 
-```yaml
-version: '3.8'
-services:
-  db:
-    image: postgres:18
-    environment:
-      POSTGRES_DB: cert_observatory
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+| Column | Type | Description |
+|--------|------|-------------|
+| `state_id` | bigserial (PK) | Auto-generated state ID |
+| `domain_id` | bigint | Reference to domains table |
+| `chain_hash` | bytea | Reference to chains table |
+| `first_seen_at` | timestamptz | When this chain was first seen for this domain |
+| `last_seen_at` | timestamptz | When this chain was last seen |
+| `ended_at` | timestamptz | When this chain stopped being current (NULL = current) |
+| `seen_count` | bigint | Number of successful observations |
+| `last_mode` | crawl_mode | How the most recent observation was triggered |
 
-volumes:
-  pgdata:
-```
+### domain_locks
 
-Then configure the application:
+Advisory locks for preventing concurrent crawls of the same domain.
 
-```bash
-export DB_HOST=localhost
-export DB_USER=postgres
-export DB_PASSWORD=postgres
-export DB_NAME=cert_observatory
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| `domain` | text (PK) | Domain being locked |
+| `locked_at` | timestamptz | When the lock was acquired |
+| `locked_by` | text | Identifier of the lock holder |
+| `expires_at` | timestamptz | When the lock automatically expires |
+
+### root_sources (optional)
+
+Named sources for root certificate ingestion.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `source_id` | bigserial (PK) | Auto-generated source ID |
+| `source_name` | text (unique) | Name of the root source |
+| `first_seen_at` | timestamptz | When this source was first added |
+
+### root_source_certs (optional)
+
+Mapping of certificates to a root source.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `source_id` | bigint (PK) | Reference to root_sources table |
+| `cert_hash` | bytea (PK) | Reference to certificates table |
+| `added_at` | timestamptz | When this certificate was added to this source |
+
+## Types
+
+### crawl_mode
+
+Enum indicating how a crawl was triggered:
+- `standard` - Normal UI fetch
+- `forced` - Forced refresh by user
+- `auto` - Automated background crawl

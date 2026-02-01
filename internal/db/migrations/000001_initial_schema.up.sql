@@ -301,3 +301,27 @@ CREATE TABLE IF NOT EXISTS root_source_certs (
 
 COMMENT ON TABLE root_source_certs IS
 'Optional mapping of certificates to a root source. Independent of chain validity.';
+
+
+----------------------------
+-- Domain crawl locks (prevents concurrent crawls)
+----------------------------
+
+CREATE TABLE IF NOT EXISTS domain_locks (
+  domain      text PRIMARY KEY,
+  locked_at   timestamptz NOT NULL DEFAULT now(),
+  locked_by   text NOT NULL,
+  expires_at  timestamptz NOT NULL,
+
+  CHECK (length(domain) BETWEEN 1 AND 253),
+  CHECK (expires_at > locked_at)
+);
+
+COMMENT ON TABLE domain_locks IS
+'Advisory locks for preventing concurrent crawls of the same domain.';
+COMMENT ON COLUMN domain_locks.domain IS 'Domain being locked.';
+COMMENT ON COLUMN domain_locks.locked_by IS 'Identifier of the lock holder (e.g., hostname or request ID).';
+COMMENT ON COLUMN domain_locks.expires_at IS 'When the lock automatically expires if not released.';
+
+CREATE INDEX IF NOT EXISTS idx_domain_locks_expires
+  ON domain_locks (expires_at);

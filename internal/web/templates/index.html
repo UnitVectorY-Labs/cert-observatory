@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cert Observatory</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <meta name="description" content="Inspect TLS certificate chains for any domain">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🔐 Cert Observatory</h1>
+            <p>Retrieve and inspect TLS certificate chains for any domain. The retrieval is done server-side, so results may differ from your local view if a different certificate is served or there is a man-in-the-middle.</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="input-section">
+            <div class="input-panel">
+                <h2>Retrieve Certificate Chain</h2>
+                <form id="inspect-form" class="search-form" method="POST" action="/inspect" hx-post="/inspect" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
+                    <input 
+                        type="text" 
+                        name="domain" 
+                        class="search-input" 
+                        placeholder="Enter domain (e.g., example.com)" 
+                        maxlength="253"
+                        required
+                        autocomplete="off"
+                        autocapitalize="none"
+                        autocorrect="off"
+                        spellcheck="false"
+                    >
+                    <button type="submit" class="btn btn-primary">
+                        <span class="htmx-indicator spinner"></span>
+                        Retrieve
+                    </button>
+                </form>
+            </div>
+            <div class="info-panel">
+                <h3>What this tool does</h3>
+                <ul>
+                    <li><strong>Server-side retrieval</strong> of the TLS certificate chain presented by the server</li>
+                    <li><strong>Full chain displayed</strong> with each certificate decoded for inspection</li>
+                    <li><strong>Inspection only</strong> – chain trust is not validated</li>
+                    <li>TLS handshake on port 443; no HTTP requests, no redirects</li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="loading" class="htmx-indicator loading-overlay">
+            <div class="loading-content">
+                <div class="spinner-large"></div>
+                <p>Retrieving certificate chain...</p>
+            </div>
+        </div>
+
+        <div id="results">
+            {{if .Error}}
+            {{template "error" .Error}}
+            {{else if .Results}}
+            {{template "results" .Results}}
+            {{else}}
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                </svg>
+                <p>Enter a domain above to retrieve its TLS certificate chain</p>
+            </div>
+            {{end}}
+        </div>
+    </main>
+
+    <footer>
+        <p>
+            <a href="https://github.com/UnitVectorY-Labs">UnitVectorY Labs</a> | 
+            <a href="https://opensource.org/licenses/MIT">MIT License</a> | 
+            <a href="https://github.com/UnitVectorY-Labs/cert-observatory"><strong>cert-observatory</strong> on GitHub</a>
+        </p>
+    </footer>
+
+    <script src="/static/js/htmx.min.js"></script>
+    <script>
+        // Copy PEM to clipboard
+        function copyPEM(button, certHash) {
+            const pemBlock = document.getElementById('pem-' + certHash);
+            if (pemBlock) {
+                navigator.clipboard.writeText(pemBlock.textContent).then(() => {
+                    const originalText = button.textContent;
+                    button.textContent = 'Copied!';
+                    button.classList.add('copied');
+                    setTimeout(() => { 
+                        button.textContent = originalText; 
+                        button.classList.remove('copied');
+                    }, 1500);
+                });
+            }
+        }
+
+        // Clear results before new request
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

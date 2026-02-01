@@ -1,0 +1,142 @@
+{{define "results"}}
+<div class="results-section">
+    <div class="results-toolbar">
+        <div class="domain-info">
+            <span class="domain-name">{{.Domain}}</span>
+            {{if .IsCached}}
+            <span class="cache-indicator">cached {{.CacheAge}}</span>
+            {{else}}
+            <span class="fresh-indicator">fresh</span>
+            {{end}}
+            {{if .LastCrawlFailed}}
+            <span class="error-indicator">latest crawl failed</span>
+            {{end}}
+        </div>
+        {{if .CanForceRefresh}}
+        <form class="refresh-form" method="POST" action="/refresh" hx-post="/refresh" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
+            <input type="hidden" name="domain" value="{{.Domain}}">
+            <button type="submit" class="btn btn-secondary btn-sm">
+                <span class="htmx-indicator spinner"></span>
+                Force Refresh
+            </button>
+        </form>
+        {{end}}
+    </div>
+
+    <div class="chain-container">
+        {{range $index, $cert := .Chain}}
+        <div class="cert-row">
+            <div class="cert-row-header">
+                <span class="cert-position">{{if eq $index 0}}Leaf Certificate{{else if $cert.IsCA}}Intermediate CA{{else}}Certificate #{{$index}}{{end}}</span>
+            </div>
+            <div class="cert-row-content">
+                <div class="pem-panel">
+                    <div class="pem-container">
+                        <pre class="pem-block" id="pem-{{$cert.HashHex}}">{{$cert.PEM}}</pre>
+                        <button type="button" class="btn-copy" onclick="copyPEM(this, '{{$cert.HashHex}}')">Copy PEM</button>
+                    </div>
+                </div>
+                <div class="details-panel">
+                    <div class="detail-grid-2">
+                        <div class="detail-item">
+                            <div class="detail-label">Subject</div>
+                            <div class="detail-value-box">{{$cert.SubjectDN}}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Issuer</div>
+                            <div class="detail-value-box">{{$cert.IssuerDN}}</div>
+                        </div>
+                    </div>
+
+                    <div class="detail-grid-2">
+                        <div class="detail-item">
+                            <div class="detail-label">Not Before</div>
+                            <div class="detail-value {{if $cert.IsNotYetValid}}validity-future{{else}}validity-valid{{end}}">
+                                {{$cert.NotBeforeFormatted}}
+                            </div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Not After</div>
+                            <div class="detail-value {{if $cert.IsExpired}}validity-expired{{else}}validity-valid{{end}}">
+                                {{$cert.NotAfterFormatted}}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="detail-grid-2">
+                        <div class="detail-item">
+                            <div class="detail-label">Serial Number</div>
+                            <div class="detail-value-box mono">{{$cert.SerialNumber}}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Signature Algorithm</div>
+                            <div class="detail-value-box">{{$cert.SignatureAlgorithm}}</div>
+                        </div>
+                    </div>
+
+                    <div class="detail-grid-2">
+                        <div class="detail-item">
+                            <div class="detail-label">Public Key</div>
+                            <div class="detail-value-box">{{$cert.PublicKeyInfo}}</div>
+                        </div>
+                        {{if or $cert.IsCA $cert.HasPathLenConstraint}}
+                        <div class="detail-item">
+                            <div class="detail-label">Basic Constraints</div>
+                            <div class="detail-value-box">
+                                CA: {{if $cert.IsCA}}Yes{{else}}No{{end}}{{if $cert.HasPathLenConstraint}}, Path Length: {{$cert.PathLenConstraint}}{{end}}
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+
+                    {{if $cert.KeyUsage}}
+                    <div class="detail-item">
+                        <div class="detail-label">Key Usage</div>
+                        <div class="detail-value-box">{{$cert.KeyUsage}}</div>
+                    </div>
+                    {{end}}
+
+                    {{if $cert.ExtKeyUsage}}
+                    <div class="detail-item">
+                        <div class="detail-label">Extended Key Usage</div>
+                        <div class="detail-value-box">{{$cert.ExtKeyUsage}}</div>
+                    </div>
+                    {{end}}
+
+                    {{if $cert.SANs}}
+                    <div class="detail-item">
+                        <div class="detail-label">Subject Alternative Names ({{len $cert.SANs}})</div>
+                        <div class="san-container">
+                            {{range $cert.SANs}}
+                            <span class="san-item">{{.}}</span>
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+
+                    <div class="detail-grid-2">
+                        {{if $cert.SKI}}
+                        <div class="detail-item">
+                            <div class="detail-label">Subject Key Identifier</div>
+                            <div class="detail-value-box mono">{{$cert.SKI}}</div>
+                        </div>
+                        {{end}}
+                        {{if $cert.AKI}}
+                        <div class="detail-item">
+                            <div class="detail-label">Authority Key Identifier</div>
+                            <div class="detail-value-box mono">{{$cert.AKI}}</div>
+                        </div>
+                        {{end}}
+                    </div>
+
+                    <div class="detail-item">
+                        <div class="detail-label">Certificate Hash (SHA-256)</div>
+                        <div class="detail-value-box mono">{{$cert.HashHex}}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}
