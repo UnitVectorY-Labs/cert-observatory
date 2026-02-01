@@ -15,6 +15,7 @@ import (
 // IndexData is the view model for the index page.
 type IndexData struct {
 	Results *ResultsViewData
+	Error   *ErrorData
 }
 
 // handleIndex serves the main page (GET only, read-only, never triggers crawl).
@@ -250,7 +251,7 @@ func (s *Server) renderError(w http.ResponseWriter, r *http.Request, title, mess
 	}
 
 	// For regular requests, render full page with error
-	pageData := &IndexData{}
+	pageData := &IndexData{Error: errData}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render error page", "error", err)
 		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", title, message)

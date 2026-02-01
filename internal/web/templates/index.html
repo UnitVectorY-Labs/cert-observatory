@@ -57,7 +57,9 @@
         </div>
 
         <div id="results">
-            {{if .Results}}
+            {{if .Error}}
+            {{template "error" .Error}}
+            {{else if .Results}}
             {{template "results" .Results}}
             {{else}}
             <div class="empty-state">
