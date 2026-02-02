@@ -30,8 +30,11 @@ func rootCmd() *cobra.Command {
 	}
 
 	root.AddCommand(crawlDomainCmd())
+	root.AddCommand(crawlDomainsCmd())
 	root.AddCommand(serveWebCmd())
 	root.AddCommand(migrateCmd())
+	root.AddCommand(ingestToplistCmd())
+	root.AddCommand(ingestRootsCmd())
 
 	return root
 }
@@ -213,6 +216,140 @@ func migrateCmd() *cobra.Command {
 
 	c.AddCommand(upCmd)
 	c.AddCommand(statusCmd)
+
+	return c
+}
+
+func crawlDomainsCmd() *cobra.Command {
+	cfg := cmd.DefaultCrawlDomainsConfig()
+	cfg.DBConfig = &db.Config{}
+
+	c := &cobra.Command{
+		Use:   "crawl-domains",
+		Short: "Crawl domains that are due for automated re-crawling",
+		Long: `A scheduled job that selects domains from the database that are due for
+re-crawl based on age threshold, crawls them in parallel, and updates the
+database with any new certificate chains.
+
+Domains are eligible for crawling when:
+- They are marked for automated crawling (auto_crawl = true)
+- They are not in automated backoff
+- Their last successful crawl is older than the effective age threshold
+
+The effective age is calculated as: (age_days * 24h) - 1h
+This allows the job to run daily with a small overlap window for idempotency.`,
+		RunE: func(c *cobra.Command, args []string) error {
+			// Apply environment variable defaults
+			if ageDays := os.Getenv("CERT_OBS_CRAWL_AGE_DAYS"); ageDays != "" {
+				if v, err := strconv.Atoi(ageDays); err == nil {
+					cfg.AgeDays = v
+				}
+			}
+			if parallel := os.Getenv("CERT_OBS_CRAWL_PARALLEL"); parallel != "" {
+				if v, err := strconv.Atoi(parallel); err == nil {
+					cfg.Parallel = v
+				}
+			}
+
+			applyDBEnvDefaults(cfg.DBConfig)
+
+			return cmd.CrawlDomains(context.Background(), cfg)
+		},
+	}
+
+	// Crawl configuration flags
+	c.Flags().IntVar(&cfg.AgeDays, "age-days", 1, "Days since last crawl to qualify for re-crawl (env: CERT_OBS_CRAWL_AGE_DAYS)")
+	c.Flags().IntVar(&cfg.Parallel, "parallel", 2, "Number of domains to crawl concurrently (env: CERT_OBS_CRAWL_PARALLEL)")
+	c.Flags().DurationVar(&cfg.Timeout, "timeout", 10*time.Second, "Timeout for each crawl operation")
+	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
+
+	// Database connection flags
+	c.Flags().StringVar(&cfg.DBConfig.Host, "db-host", "", "Database host (env: DB_HOST)")
+	c.Flags().IntVar(&cfg.DBConfig.Port, "db-port", 0, "Database port (env: DB_PORT)")
+	c.Flags().StringVar(&cfg.DBConfig.User, "db-user", "", "Database user (env: DB_USER)")
+	c.Flags().StringVar(&cfg.DBConfig.Password, "db-password", "", "Database password (env: DB_PASSWORD)")
+	c.Flags().StringVar(&cfg.DBConfig.Database, "db-name", "", "Database name (env: DB_NAME)")
+	c.Flags().StringVar(&cfg.DBConfig.SSLMode, "db-sslmode", "", "Database SSL mode (env: DB_SSLMODE)")
+
+	return c
+}
+
+func ingestToplistCmd() *cobra.Command {
+	cfg := cmd.DefaultIngestToplistConfig()
+	cfg.DBConfig = &db.Config{}
+
+	c := &cobra.Command{
+		Use:   "ingest-toplist",
+		Short: "Ingest domains from Cloudflare Radar Top 10k list",
+		Long: `Fetches the current top domain list from Cloudflare Radar and upserts
+domains into the database without crawling them. This seeds future automated crawls.
+
+Domains are inserted with:
+- popular_domain = true
+- auto_crawl = true
+
+Existing domains have their flags updated if needed. The operation is idempotent.`,
+		RunE: func(c *cobra.Command, args []string) error {
+			// Apply environment variable defaults
+			if token := os.Getenv("CLOUDFLARE_API_TOKEN"); token != "" && cfg.CloudflareToken == "" {
+				cfg.CloudflareToken = token
+			}
+
+			if cfg.CloudflareToken == "" {
+				return fmt.Errorf("--cloudflare-token is required (or set CLOUDFLARE_API_TOKEN)")
+			}
+
+			applyDBEnvDefaults(cfg.DBConfig)
+
+			return cmd.IngestToplist(context.Background(), cfg)
+		},
+	}
+
+	// Ingest configuration flags
+	c.Flags().StringVar(&cfg.CloudflareToken, "cloudflare-token", "", "Cloudflare API token (env: CLOUDFLARE_API_TOKEN)")
+	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
+
+	// Database connection flags
+	c.Flags().StringVar(&cfg.DBConfig.Host, "db-host", "", "Database host (env: DB_HOST)")
+	c.Flags().IntVar(&cfg.DBConfig.Port, "db-port", 0, "Database port (env: DB_PORT)")
+	c.Flags().StringVar(&cfg.DBConfig.User, "db-user", "", "Database user (env: DB_USER)")
+	c.Flags().StringVar(&cfg.DBConfig.Password, "db-password", "", "Database password (env: DB_PASSWORD)")
+	c.Flags().StringVar(&cfg.DBConfig.Database, "db-name", "", "Database name (env: DB_NAME)")
+	c.Flags().StringVar(&cfg.DBConfig.SSLMode, "db-sslmode", "", "Database SSL mode (env: DB_SSLMODE)")
+
+	return c
+}
+
+func ingestRootsCmd() *cobra.Command {
+	cfg := cmd.DefaultIngestRootsConfig()
+	cfg.DBConfig = &db.Config{}
+
+	c := &cobra.Command{
+		Use:   "ingest-roots",
+		Short: "Ingest root certificates from trusted sources",
+		Long: `Fetches and ingests root certificates (PEM format) into the certificate catalog.
+
+Current sources:
+- Mozilla CCADB (Included Roots with Websites trust bit)
+
+Certificates are inserted if not already present. The operation is idempotent.
+Root certificates are tracked via the root_sources and root_source_certs tables.`,
+		RunE: func(c *cobra.Command, args []string) error {
+			applyDBEnvDefaults(cfg.DBConfig)
+			return cmd.IngestRoots(context.Background(), cfg)
+		},
+	}
+
+	// Ingest configuration flags
+	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
+
+	// Database connection flags
+	c.Flags().StringVar(&cfg.DBConfig.Host, "db-host", "", "Database host (env: DB_HOST)")
+	c.Flags().IntVar(&cfg.DBConfig.Port, "db-port", 0, "Database port (env: DB_PORT)")
+	c.Flags().StringVar(&cfg.DBConfig.User, "db-user", "", "Database user (env: DB_USER)")
+	c.Flags().StringVar(&cfg.DBConfig.Password, "db-password", "", "Database password (env: DB_PASSWORD)")
+	c.Flags().StringVar(&cfg.DBConfig.Database, "db-name", "", "Database name (env: DB_NAME)")
+	c.Flags().StringVar(&cfg.DBConfig.SSLMode, "db-sslmode", "", "Database SSL mode (env: DB_SSLMODE)")
 
 	return c
 }
