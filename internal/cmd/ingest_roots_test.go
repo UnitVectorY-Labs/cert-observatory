@@ -127,7 +127,7 @@ func TestParsePEMBundle(t *testing.T) {
 				if len(cert.CertHash) != 32 {
 					t.Errorf("cert[%d] has invalid hash length: %d", i, len(cert.CertHash))
 				}
-				if cert.PEM == "" {
+				if cert.PEM() == "" {
 					t.Errorf("cert[%d] has empty PEM", i)
 				}
 				if cert.Parsed == nil {

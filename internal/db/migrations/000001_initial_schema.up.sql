@@ -4,9 +4,12 @@ cert-observatory Database Schema (PostgreSQL)
 Purpose:
 - Catalog TLS certificates (deduplicated by hash)
 - Store exact peer-provided certificate chains (deduplicated)
-- Track latest chain per domain plus historical unique chain states without per-crawl logs
+- Track latest chain per domain plus historical unique chains ever observed
 - Track rate limiting timestamps and basic failure/backoff for automated crawling
-- Track potential issuer relationships (supports cross-signing), independent of trust validation
+
+Non-goals:
+- No trust validation or "is valid" computation
+- No verified issuer graph building
 
 Assumptions:
 - Domain normalization occurs in the application layer (lowercase, no trailing dot)
@@ -16,10 +19,10 @@ Assumptions:
 - Chain hash is sha256 over the ordered list of certificate hashes (application-defined encoding)
 
 Recommended transaction pattern:
-- Insert missing certificates
-- Insert missing chain and chain members
-- Update domain pointers and timestamps
-- Upsert or roll domain_chain_states current interval
+- Insert missing certificates (upsert by hash)
+- Insert missing chain (upsert by hash)
+- Update domain current_chain_hash and timestamps
+- Upsert domain_chains association
 */
 
 ----------------------------
@@ -48,8 +51,12 @@ CREATE TABLE IF NOT EXISTS certificates (
   -- First time this certificate was inserted into the catalog
   first_seen_at timestamptz NOT NULL DEFAULT now(),
 
-  -- PEM encoding for display and export
-  pem           text NOT NULL,
+  -- DER encoded certificate (canonical bytes that are hashed)
+  der           bytea NOT NULL,
+
+  -- Subject and Issuer distinguished names (RFC 2253 format)
+  subject       text NOT NULL,
+  issuer        text NOT NULL,
 
   -- Minimal indexed fields used for UI and operational queries
   not_before    timestamptz NULL,
@@ -61,6 +68,7 @@ CREATE TABLE IF NOT EXISTS certificates (
   aki           bytea NULL,
 
   CHECK (octet_length(cert_hash) = 32),
+  CHECK (octet_length(der) > 0),
   CHECK (ski IS NULL OR octet_length(ski) BETWEEN 8 AND 64),
   CHECK (aki IS NULL OR octet_length(aki) BETWEEN 8 AND 64)
 );
@@ -68,50 +76,21 @@ CREATE TABLE IF NOT EXISTS certificates (
 COMMENT ON TABLE certificates IS
 'Immutable certificate catalog. One row per unique certificate. Keyed by sha256 of DER bytes.';
 COMMENT ON COLUMN certificates.cert_hash IS 'sha256(DER) stored as 32-byte bytea.';
-COMMENT ON COLUMN certificates.pem IS 'PEM encoded certificate as presented or reconstructed from DER.';
+COMMENT ON COLUMN certificates.der IS 'DER encoded certificate bytes.';
+COMMENT ON COLUMN certificates.subject IS 'Subject distinguished name in RFC 2253 format.';
+COMMENT ON COLUMN certificates.issuer IS 'Issuer distinguished name in RFC 2253 format.';
 COMMENT ON COLUMN certificates.not_before IS 'Certificate validity start time (from certificate).';
 COMMENT ON COLUMN certificates.not_after IS 'Certificate validity end time (from certificate).';
 COMMENT ON COLUMN certificates.ski IS 'Subject Key Identifier (raw bytes) if present.';
 COMMENT ON COLUMN certificates.aki IS 'Authority Key Identifier (raw bytes) if present.';
 
+-- Index for expiry queries
 CREATE INDEX IF NOT EXISTS idx_cert_not_after
   ON certificates (not_after);
 
-CREATE INDEX IF NOT EXISTS idx_cert_ski
-  ON certificates (ski)
-  WHERE ski IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_cert_aki
-  ON certificates (aki)
-  WHERE aki IS NOT NULL;
-
-
-----------------------------
--- Potential signer relationships (supports cross-signing)
-----------------------------
-
-CREATE TABLE IF NOT EXISTS cert_signers (
-  subject_cert_hash bytea NOT NULL REFERENCES certificates(cert_hash) ON DELETE CASCADE,
-  issuer_cert_hash  bytea NOT NULL REFERENCES certificates(cert_hash) ON DELETE CASCADE,
-
-  first_seen_at     timestamptz NOT NULL DEFAULT now(),
-
-  -- If the application verifies the signature, set true.
-  is_verified       boolean NOT NULL DEFAULT false,
-
-  PRIMARY KEY (subject_cert_hash, issuer_cert_hash),
-  CHECK (octet_length(subject_cert_hash) = 32),
-  CHECK (octet_length(issuer_cert_hash) = 32)
-);
-
-COMMENT ON TABLE cert_signers IS
-'Many-to-many mapping of which certificates can sign which other certificates. Useful for cross-signing analysis.';
-COMMENT ON COLUMN cert_signers.subject_cert_hash IS 'Certificate being signed.';
-COMMENT ON COLUMN cert_signers.issuer_cert_hash IS 'Certificate that signs the subject certificate.';
-COMMENT ON COLUMN cert_signers.is_verified IS 'True if signature was cryptographically verified by the application.';
-
-CREATE INDEX IF NOT EXISTS idx_cert_signers_issuer
-  ON cert_signers (issuer_cert_hash);
+-- Index for issuer grouping and UI filters
+CREATE INDEX IF NOT EXISTS idx_cert_issuer
+  ON certificates (issuer);
 
 
 ----------------------------
@@ -122,42 +101,34 @@ CREATE TABLE IF NOT EXISTS chains (
   -- sha256 of ordered certificate hash list, always 32 bytes
   chain_hash     bytea PRIMARY KEY,
 
-  created_at     timestamptz NOT NULL DEFAULT now(),
+  -- First time this chain was observed
+  first_seen_at  timestamptz NOT NULL DEFAULT now(),
 
-  -- Convenience pointer to the first certificate in the peer-provided list
-  leaf_cert_hash bytea NOT NULL REFERENCES certificates(cert_hash) ON DELETE RESTRICT,
+  -- Ordered array of certificate hashes (leaf-first)
+  -- Note: PostgreSQL does not support foreign keys on array elements.
+  -- Referential integrity is enforced by application logic: certificates
+  -- are always inserted before chains within the same transaction.
+  cert_hashes    bytea[] NOT NULL,
 
-  -- Number of certificates in the peer-provided list
-  depth          integer NOT NULL,
+  -- Denormalized convenience columns (derived from cert_hashes)
+  -- Note: PostgreSQL arrays are 1-indexed, so cert_hashes[1] is the first element (leaf certificate)
+  leaf_cert_hash bytea GENERATED ALWAYS AS (cert_hashes[1]) STORED,
+  depth          integer GENERATED ALWAYS AS (array_length(cert_hashes, 1)) STORED,
 
   CHECK (octet_length(chain_hash) = 32),
-  CHECK (octet_length(leaf_cert_hash) = 32),
-  CHECK (depth >= 1 AND depth <= 20)
+  CHECK (array_length(cert_hashes, 1) >= 1)
 );
 
 COMMENT ON TABLE chains IS
 'Deduplicated peer-provided chains. A chain is the ordered list returned by the server during TLS handshake.';
-COMMENT ON COLUMN chains.chain_hash IS 'sha256 of the ordered list of cert_hash values using an application-defined encoding.';
-COMMENT ON COLUMN chains.leaf_cert_hash IS 'First certificate in the peer-provided chain.';
-COMMENT ON COLUMN chains.depth IS 'Count of certificates in the peer-provided chain.';
+COMMENT ON COLUMN chains.chain_hash IS 'sha256 of the ordered list of cert_hash values using an application-defined encoding (version 1: 4-byte count + concatenated hashes).';
+COMMENT ON COLUMN chains.cert_hashes IS 'Ordered array of certificate hashes, leaf-first. PostgreSQL arrays are 1-indexed.';
+COMMENT ON COLUMN chains.leaf_cert_hash IS 'First certificate in the chain (derived from cert_hashes[1]).';
+COMMENT ON COLUMN chains.depth IS 'Count of certificates in the chain (derived from array_length).';
 
-CREATE TABLE IF NOT EXISTS chain_certs (
-  chain_hash bytea    NOT NULL REFERENCES chains(chain_hash) ON DELETE CASCADE,
-  position   smallint NOT NULL,
-  cert_hash  bytea    NOT NULL REFERENCES certificates(cert_hash) ON DELETE RESTRICT,
-
-  PRIMARY KEY (chain_hash, position),
-  CHECK (position >= 1),
-  CHECK (octet_length(cert_hash) = 32)
-);
-
-COMMENT ON TABLE chain_certs IS
-'Ordered chain membership. Stores the exact peer-provided chain order.';
-COMMENT ON COLUMN chain_certs.position IS '1-based index into the chain, where 1 is the leaf certificate.';
-
--- Reverse lookup: which chains contain a given certificate
-CREATE INDEX IF NOT EXISTS idx_chain_certs_cert
-  ON chain_certs (cert_hash);
+-- GIN index for finding chains containing a specific certificate
+CREATE INDEX IF NOT EXISTS idx_chains_cert_hashes
+  ON chains USING GIN (cert_hashes);
 
 
 ----------------------------
@@ -165,10 +136,8 @@ CREATE INDEX IF NOT EXISTS idx_chain_certs_cert
 ----------------------------
 
 CREATE TABLE IF NOT EXISTS domains (
-  domain_id bigserial PRIMARY KEY,
-
-  -- Normalized domain string, unique. App layer enforces full validation.
-  domain text NOT NULL UNIQUE,
+  -- Normalized domain string as primary key
+  domain text PRIMARY KEY,
 
   first_seen_at timestamptz NOT NULL DEFAULT now(),
 
@@ -206,7 +175,7 @@ CREATE TABLE IF NOT EXISTS domains (
 
 COMMENT ON TABLE domains IS
 'Normalized domain targets (TLS SNI). Stores latest chain pointer, rate limit timestamps, and automated backoff state.';
-COMMENT ON COLUMN domains.domain IS 'Normalized domain (lowercase, no trailing dot).';
+COMMENT ON COLUMN domains.domain IS 'Normalized domain (lowercase, no trailing dot). Primary key.';
 COMMENT ON COLUMN domains.popular_domain IS 'True if the domain ever appeared on an imported popular list.';
 COMMENT ON COLUMN domains.auto_crawl IS 'True if automated crawling is enabled for this domain.';
 COMMENT ON COLUMN domains.current_chain_hash IS 'Latest successful chain_hash observed for this domain.';
@@ -232,96 +201,39 @@ CREATE INDEX IF NOT EXISTS idx_domains_current_chain
 
 
 ----------------------------
--- Domain chain history (state intervals, no per-crawl logs)
+-- Domain chain history (one row per unique chain ever observed for a domain)
 ----------------------------
 
-CREATE TABLE IF NOT EXISTS domain_chain_states (
-  state_id bigserial PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS domain_chains (
+  -- Composite primary key: one row per (domain, chain) pair
+  domain     text NOT NULL REFERENCES domains(domain) ON DELETE CASCADE,
+  chain_hash bytea NOT NULL REFERENCES chains(chain_hash) ON DELETE RESTRICT,
 
-  domain_id  bigint NOT NULL REFERENCES domains(domain_id) ON DELETE CASCADE,
-  chain_hash bytea  NOT NULL REFERENCES chains(chain_hash) ON DELETE RESTRICT,
-
-  -- Interval tracking for the period when this chain was current
+  -- When this chain was first observed for this domain
   first_seen_at timestamptz NOT NULL,
+
+  -- When this chain was last observed for this domain
   last_seen_at  timestamptz NOT NULL,
-  ended_at      timestamptz NULL,
 
-  -- Deduped observation counts for the interval
-  seen_count bigint NOT NULL DEFAULT 1,
+  -- Number of times this chain was observed for this domain
+  seen_count    bigint NOT NULL DEFAULT 1,
 
-  -- How the most recent update to this interval was observed
-  last_mode crawl_mode NOT NULL,
+  -- How the most recent observation was triggered
+  last_mode     crawl_mode NOT NULL,
 
+  PRIMARY KEY (domain, chain_hash),
   CHECK (octet_length(chain_hash) = 32),
   CHECK (last_seen_at >= first_seen_at),
-  CHECK (ended_at IS NULL OR ended_at >= last_seen_at)
+  CHECK (seen_count >= 1)
 );
 
-COMMENT ON TABLE domain_chain_states IS
-'History of unique chain states per domain stored as intervals. Avoids storing a row per crawl attempt.';
-COMMENT ON COLUMN domain_chain_states.ended_at IS 'When this chain stopped being current for the domain. NULL means current.';
-COMMENT ON COLUMN domain_chain_states.seen_count IS 'Number of successful observations that matched this chain during the interval.';
-COMMENT ON COLUMN domain_chain_states.last_mode IS 'How the most recent observation in this interval was triggered.';
+COMMENT ON TABLE domain_chains IS
+'One row per unique chain ever observed for a domain. No duplicates on oscillation between chains.';
+COMMENT ON COLUMN domain_chains.first_seen_at IS 'When this chain was first observed for this domain.';
+COMMENT ON COLUMN domain_chains.last_seen_at IS 'When this chain was last observed for this domain.';
+COMMENT ON COLUMN domain_chains.seen_count IS 'Total number of successful observations of this chain for this domain.';
+COMMENT ON COLUMN domain_chains.last_mode IS 'How the most recent observation was triggered.';
 
--- Enforce exactly one current interval per domain
-CREATE UNIQUE INDEX IF NOT EXISTS uq_domain_chain_current
-  ON domain_chain_states (domain_id)
-  WHERE ended_at IS NULL;
-
--- Fast fetch of current state
-CREATE INDEX IF NOT EXISTS idx_domain_chain_current
-  ON domain_chain_states (domain_id, last_seen_at DESC)
-  WHERE ended_at IS NULL;
-
--- Reverse lookup: which domains ever served this chain
-CREATE INDEX IF NOT EXISTS idx_domain_chain_chain_hash
-  ON domain_chain_states (chain_hash);
-
-
-----------------------------
--- Optional root source tracking (safe to include now, can remain unused)
-----------------------------
-
-CREATE TABLE IF NOT EXISTS root_sources (
-  source_id bigserial PRIMARY KEY,
-  source_name text NOT NULL UNIQUE,
-  first_seen_at timestamptz NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE root_sources IS
-'Named sources for root certificate ingestion (optional). Examples: mozilla_nss, custom_bundle.';
-
-CREATE TABLE IF NOT EXISTS root_source_certs (
-  source_id bigint NOT NULL REFERENCES root_sources(source_id) ON DELETE CASCADE,
-  cert_hash bytea  NOT NULL REFERENCES certificates(cert_hash) ON DELETE CASCADE,
-  added_at  timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (source_id, cert_hash),
-  CHECK (octet_length(cert_hash) = 32)
-);
-
-COMMENT ON TABLE root_source_certs IS
-'Optional mapping of certificates to a root source. Independent of chain validity.';
-
-
-----------------------------
--- Domain crawl locks (prevents concurrent crawls)
-----------------------------
-
-CREATE TABLE IF NOT EXISTS domain_locks (
-  domain      text PRIMARY KEY,
-  locked_at   timestamptz NOT NULL DEFAULT now(),
-  locked_by   text NOT NULL,
-  expires_at  timestamptz NOT NULL,
-
-  CHECK (length(domain) BETWEEN 1 AND 253),
-  CHECK (expires_at > locked_at)
-);
-
-COMMENT ON TABLE domain_locks IS
-'Advisory locks for preventing concurrent crawls of the same domain.';
-COMMENT ON COLUMN domain_locks.domain IS 'Domain being locked.';
-COMMENT ON COLUMN domain_locks.locked_by IS 'Identifier of the lock holder (e.g., hostname or request ID).';
-COMMENT ON COLUMN domain_locks.expires_at IS 'When the lock automatically expires if not released.';
-
-CREATE INDEX IF NOT EXISTS idx_domain_locks_expires
-  ON domain_locks (expires_at);
+-- Reverse lookup: which domains have ever served this chain
+CREATE INDEX IF NOT EXISTS idx_domain_chains_chain_hash
+  ON domain_chains (chain_hash);

@@ -18,7 +18,7 @@ import (
 const (
 	// MozillaCCADBURL is the URL for Mozilla's included roots PEM bundle.
 	MozillaCCADBURL = "https://ccadb.my.salesforce-sites.com/mozilla/IncludedRootsPEMTxt?TrustBitsInclude=Websites"
-	// MozillaSourceName is the name for the Mozilla CCADB root source.
+	// MozillaSourceName is the name for the Mozilla CCADB root source (kept for logging purposes).
 	MozillaSourceName = "mozilla_ccadb"
 )
 
@@ -155,12 +155,6 @@ func ingestRootSource(
 		return stats, nil
 	}
 
-	// Get or create root source in DB
-	sourceID, err := repo.GetOrCreateRootSource(ctx, source.Name)
-	if err != nil {
-		return nil, fmt.Errorf("get/create root source: %w", err)
-	}
-
 	// First, check which certs already exist to minimize DB operations
 	hashes := make([][]byte, len(certs))
 	for i, cert := range certs {
@@ -172,7 +166,7 @@ func ingestRootSource(
 		return nil, fmt.Errorf("check existing certificates: %w", err)
 	}
 
-	// Insert new certificates and associate with source
+	// Insert new certificates (no source association needed with simplified schema)
 	for _, cert := range certs {
 		hashKey := string(cert.CertHash)
 		if existing[hashKey] {
@@ -200,11 +194,6 @@ func ingestRootSource(
 				// Race condition - another process inserted it
 				stats.AlreadyExists++
 			}
-		}
-
-		// Associate with source (idempotent)
-		if err := repo.AssociateRootCertWithSource(ctx, sourceID, cert.CertHash); err != nil {
-			return nil, fmt.Errorf("associate cert with source: %w", err)
 		}
 	}
 

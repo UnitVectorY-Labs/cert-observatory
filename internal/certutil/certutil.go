@@ -14,10 +14,12 @@ import (
 type CertInfo struct {
 	// CertHash is the SHA-256 hash of the DER-encoded certificate (32 bytes)
 	CertHash []byte
-	// PEM is the PEM-encoded certificate
-	PEM string
 	// DER is the raw DER-encoded certificate
 	DER []byte
+	// Subject is the certificate subject distinguished name (RFC 2253 format)
+	Subject string
+	// Issuer is the certificate issuer distinguished name (RFC 2253 format)
+	Issuer string
 	// NotBefore is the certificate validity start time
 	NotBefore time.Time
 	// NotAfter is the certificate validity end time
@@ -28,6 +30,15 @@ type CertInfo struct {
 	AKI []byte
 	// Parsed is the parsed x509.Certificate for additional access
 	Parsed *x509.Certificate
+}
+
+// PEM returns the PEM-encoded certificate (computed on demand from DER)
+func (c *CertInfo) PEM() string {
+	pemBlock := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: c.DER,
+	}
+	return string(pem.EncodeToMemory(pemBlock))
 }
 
 // ParseCertificate parses a DER-encoded certificate and extracts relevant information.
@@ -45,16 +56,11 @@ func ParseX509Certificate(cert *x509.Certificate) *CertInfo {
 	der := cert.Raw
 	hash := sha256.Sum256(der)
 
-	pemBlock := &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: der,
-	}
-	pemBytes := pem.EncodeToMemory(pemBlock)
-
 	info := &CertInfo{
 		CertHash:  hash[:],
-		PEM:       string(pemBytes),
 		DER:       der,
+		Subject:   cert.Subject.String(),
+		Issuer:    cert.Issuer.String(),
 		NotBefore: cert.NotBefore,
 		NotAfter:  cert.NotAfter,
 		Parsed:    cert,
@@ -81,7 +87,7 @@ func ComputeCertHash(der []byte) []byte {
 
 // ComputeChainHash computes a deterministic hash for an ordered list of certificate hashes.
 //
-// Encoding format:
+// Encoding format (version 1):
 // - 4 bytes: number of certificates (big-endian uint32)
 // - For each certificate: 32 bytes of cert_hash
 //
@@ -116,6 +122,8 @@ type ChainInfo struct {
 	Depth int
 	// Certs contains the parsed information for each certificate
 	Certs []*CertInfo
+	// CertHashes contains the ordered list of certificate hashes
+	CertHashes [][]byte
 }
 
 // ParseChain parses a chain of x509.Certificates and computes chain information.
@@ -138,6 +146,7 @@ func ParseChain(certs []*x509.Certificate) *ChainInfo {
 		LeafCertHash: certHashes[0],
 		Depth:        len(certs),
 		Certs:        certInfos,
+		CertHashes:   certHashes,
 	}
 }
 
@@ -145,7 +154,16 @@ func ParseChain(certs []*x509.Certificate) *ChainInfo {
 func ChainToPEM(certs []*CertInfo) string {
 	var result string
 	for _, cert := range certs {
-		result += cert.PEM
+		result += cert.PEM()
 	}
 	return result
+}
+
+// DERToPEM converts DER-encoded certificate bytes to PEM format.
+func DERToPEM(der []byte) string {
+	pemBlock := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: der,
+	}
+	return string(pem.EncodeToMemory(pemBlock))
 }

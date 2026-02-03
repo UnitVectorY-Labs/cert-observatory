@@ -151,10 +151,10 @@ func CrawlDomain(ctx context.Context, cfg *CrawlDomainConfig) error {
 		logger.Info("current chain unchanged for domain")
 	}
 
-	if stats.ChainStateNewInterval {
-		logger.Info("new chain state interval created")
+	if stats.DomainChainInserted {
+		logger.Info("new domain_chain association created")
 	} else {
-		logger.Info("existing chain state interval updated")
+		logger.Info("existing domain_chain association updated")
 	}
 
 	// Output PEM to stdout
