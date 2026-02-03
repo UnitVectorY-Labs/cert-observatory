@@ -240,10 +240,10 @@ func TestParseCertificate(t *testing.T) {
 	}
 
 	// Verify PEM is not empty and contains expected header
-	if info.PEM == "" {
+	if info.PEM() == "" {
 		t.Error("PEM should not be empty")
 	}
-	if !bytes.Contains([]byte(info.PEM), []byte("-----BEGIN CERTIFICATE-----")) {
+	if !bytes.Contains([]byte(info.PEM()), []byte("-----BEGIN CERTIFICATE-----")) {
 		t.Error("PEM should contain certificate header")
 	}
 
