@@ -15,6 +15,14 @@ type EligibleDomain struct {
 	Domain   string
 }
 
+// CrawlDomainsOptions contains options for querying eligible domains.
+type CrawlDomainsOptions struct {
+	// IgnoreErrors ignores backoff errors (no_retry_before)
+	IgnoreErrors bool
+	// IncludeNonPublic includes domains where popular_domain = false
+	IncludeNonPublic bool
+}
+
 // BackoffPolicy defines the exponential backoff parameters.
 type BackoffPolicy struct {
 	BaseDelay    time.Duration
@@ -182,6 +190,76 @@ func (r *Repository) CountEligibleDomains(ctx context.Context, effectiveAge time
 	}
 
 	return count, nil
+}
+
+// CountEligibleDomainsWithOptions returns the count of domains eligible for crawling with additional options.
+func (r *Repository) CountEligibleDomainsWithOptions(ctx context.Context, effectiveAge time.Duration, opts *CrawlDomainsOptions) (int, error) {
+	threshold := time.Now().Add(-effectiveAge)
+
+	// Build the query dynamically based on options
+	query := `SELECT COUNT(*) FROM domains WHERE auto_crawl = true`
+
+	// Handle backoff logic
+	if !opts.IgnoreErrors {
+		query += ` AND (no_retry_before IS NULL OR no_retry_before <= now())`
+	}
+
+	// Handle popular_domain filter
+	if !opts.IncludeNonPublic {
+		query += ` AND popular_domain = true`
+	}
+
+	query += ` AND (last_success_at IS NULL OR last_success_at <= $1)`
+
+	var count int
+	err := r.db.QueryRowContext(ctx, query, threshold).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count eligible domains: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetEligibleDomainsForCrawlWithOptions returns domains that are due for automated re-crawling with additional options.
+func (r *Repository) GetEligibleDomainsForCrawlWithOptions(ctx context.Context, effectiveAge time.Duration, limit int, opts *CrawlDomainsOptions) ([]*EligibleDomain, error) {
+	threshold := time.Now().Add(-effectiveAge)
+
+	// Build the query dynamically based on options
+	query := `SELECT domain_id, domain FROM domains WHERE auto_crawl = true`
+
+	// Handle backoff logic
+	if !opts.IgnoreErrors {
+		query += ` AND (no_retry_before IS NULL OR no_retry_before <= now())`
+	}
+
+	// Handle popular_domain filter
+	if !opts.IncludeNonPublic {
+		query += ` AND popular_domain = true`
+	}
+
+	query += ` AND (last_success_at IS NULL OR last_success_at <= $1)`
+	query += ` ORDER BY last_success_at NULLS FIRST, domain_id LIMIT $2`
+
+	rows, err := r.db.QueryContext(ctx, query, threshold, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query eligible domains: %w", err)
+	}
+	defer rows.Close()
+
+	var domains []*EligibleDomain
+	for rows.Next() {
+		d := &EligibleDomain{}
+		if err := rows.Scan(&d.DomainID, &d.Domain); err != nil {
+			return nil, fmt.Errorf("scan domain: %w", err)
+		}
+		domains = append(domains, d)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate domains: %w", err)
+	}
+
+	return domains, nil
 }
 
 // UpsertDomainFromToplist inserts or updates a domain from the toplist.

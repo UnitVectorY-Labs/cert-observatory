@@ -132,6 +132,33 @@ func TestDefaultBackoffPolicy(t *testing.T) {
 	}
 }
 
+func TestCrawlDomainsOptions(t *testing.T) {
+	// Test default values
+	opts := &CrawlDomainsOptions{}
+
+	if opts.IgnoreErrors {
+		t.Errorf("IgnoreErrors should default to false")
+	}
+
+	if opts.IncludeNonPublic {
+		t.Errorf("IncludeNonPublic should default to false")
+	}
+
+	// Test with values set
+	opts = &CrawlDomainsOptions{
+		IgnoreErrors:     true,
+		IncludeNonPublic: true,
+	}
+
+	if !opts.IgnoreErrors {
+		t.Errorf("IgnoreErrors = %v, want true", opts.IgnoreErrors)
+	}
+
+	if !opts.IncludeNonPublic {
+		t.Errorf("IncludeNonPublic = %v, want true", opts.IncludeNonPublic)
+	}
+}
+
 func TestEffectiveAgeCalculation(t *testing.T) {
 	// Test the effective age calculation: (age_days * 24h) - 1h
 	tests := []struct {

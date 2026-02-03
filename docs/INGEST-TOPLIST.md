@@ -22,7 +22,7 @@ The `ingest-toplist` command fetches the current top domain list from Cloudflare
 
 The command uses the Cloudflare Radar API endpoint:
 ```
-https://api.cloudflare.com/client/v4/radar/datasets/ranking_top_1000
+https://api.cloudflare.com/client/v4/radar/datasets/ranking_top_10000
 ```
 
 This requires a Cloudflare API token with access to Radar datasets.
@@ -93,9 +93,9 @@ Example output:
 ```
 INFO starting ingest-toplist job
 INFO fetching domains from Cloudflare Radar
-INFO fetched domains count=1000
-INFO domain validation complete accepted=998 rejected=2
-INFO ingest-toplist completed fetched=1000 accepted=998 inserted=950 updated=48 rejected=2
+INFO fetched domains count=10000
+INFO domain validation complete accepted=9998 rejected=2
+INFO ingest-toplist completed fetched=10000 accepted=9998 inserted=9500 updated=498 rejected=2
 ```
 
 ## Idempotency

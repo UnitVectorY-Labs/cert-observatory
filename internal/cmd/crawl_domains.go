@@ -21,10 +21,16 @@ type CrawlDomainsConfig struct {
 	AgeDays int
 	// Parallel is the number of concurrent crawlers
 	Parallel int
+	// Rate is the maximum number of crawls per second (-1 for unlimited)
+	Rate int
 	// Timeout for each crawl operation
 	Timeout time.Duration
 	// Verbose enables debug logging
 	Verbose bool
+	// IgnoreErrors ignores backoff errors and crawls domains anyway
+	IgnoreErrors bool
+	// IncludeNonPublic includes non-public domains (popular_domain = false)
+	IncludeNonPublic bool
 	// DBConfig is the database configuration
 	DBConfig *db.Config
 	// Stderr is the writer for logging
@@ -34,10 +40,13 @@ type CrawlDomainsConfig struct {
 // DefaultCrawlDomainsConfig returns default configuration.
 func DefaultCrawlDomainsConfig() *CrawlDomainsConfig {
 	return &CrawlDomainsConfig{
-		AgeDays:  1,
-		Parallel: 2,
-		Timeout:  10 * time.Second,
-		Stderr:   os.Stderr,
+		AgeDays:          1,
+		Parallel:         2,
+		Rate:             -1, // unlimited by default
+		Timeout:          10 * time.Second,
+		IgnoreErrors:     false,
+		IncludeNonPublic: false,
+		Stderr:           os.Stderr,
 	}
 }
 
@@ -65,6 +74,9 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 	logger.Info("starting crawl-domains job",
 		"age_days", cfg.AgeDays,
 		"parallel", cfg.Parallel,
+		"rate", cfg.Rate,
+		"ignore_errors", cfg.IgnoreErrors,
+		"include_non_public", cfg.IncludeNonPublic,
 	)
 
 	// Connect to database
@@ -91,8 +103,14 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 
 	logger.Debug("effective age threshold", "effective_age", effectiveAge.String())
 
+	// Build options for the query
+	opts := &db.CrawlDomainsOptions{
+		IgnoreErrors:     cfg.IgnoreErrors,
+		IncludeNonPublic: cfg.IncludeNonPublic,
+	}
+
 	// Get count of eligible domains first for logging
-	totalEligible, err := repo.CountEligibleDomains(ctx, effectiveAge)
+	totalEligible, err := repo.CountEligibleDomainsWithOptions(ctx, effectiveAge, opts)
 	if err != nil {
 		logger.Error("failed to count eligible domains", "error", err)
 		return fmt.Errorf("count eligible domains: %w", err)
@@ -108,7 +126,7 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 	// Fetch eligible domains (fetch in batches but for simplicity, get all at once)
 	// Batching to improve efficiency of large queries
 	const batchLimit = 100
-	domains, err := repo.GetEligibleDomainsForCrawl(ctx, effectiveAge, batchLimit)
+	domains, err := repo.GetEligibleDomainsForCrawlWithOptions(ctx, effectiveAge, batchLimit, opts)
 	if err != nil {
 		logger.Error("failed to get eligible domains", "error", err)
 		return fmt.Errorf("get eligible domains: %w", err)
@@ -121,6 +139,15 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 	// Statistics counters
 	var succeeded atomic.Int64
 	var failed atomic.Int64
+
+	// Set up rate limiter if rate > 0
+	var rateLimiter <-chan time.Time
+	if cfg.Rate > 0 {
+		interval := time.Second / time.Duration(cfg.Rate)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		rateLimiter = ticker.C
+	}
 
 	// Worker pool
 	domainChan := make(chan *db.EligibleDomain)
@@ -137,8 +164,19 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 		}(i)
 	}
 
-	// Send domains to workers
+	// Send domains to workers (with optional rate limiting)
 	for _, domain := range domains {
+		// Apply rate limiting if enabled
+		if rateLimiter != nil {
+			select {
+			case <-ctx.Done():
+				close(domainChan)
+				return ctx.Err()
+			case <-rateLimiter:
+				// Rate limit tick received, proceed
+			}
+		}
+
 		select {
 		case <-ctx.Done():
 			close(domainChan)

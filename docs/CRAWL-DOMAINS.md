@@ -25,8 +25,9 @@ This command is designed to be run as a scheduled job (e.g., via cron or a Kuber
 A domain is eligible for crawling when:
 
 1. **Auto-crawl enabled**: `auto_crawl = true`
-2. **Not in backoff**: `no_retry_before` is NULL or in the past
-3. **Due by age**: `last_success_at` is NULL (never crawled) or older than the effective age threshold
+2. **Not in backoff**: `no_retry_before` is NULL or in the past (unless `--ignore-errors` is set)
+3. **Popular domain**: `popular_domain = true` (unless `--include-non-public` is set)
+4. **Due by age**: `last_success_at` is NULL (never crawled) or older than the effective age threshold
 
 ### Effective Age Calculation
 
@@ -51,14 +52,31 @@ When a crawl fails, the command applies exponential backoff:
 
 On success, the failure counter is reset and backoff is cleared.
 
+Use `--ignore-errors` to bypass the backoff mechanism and retry domains that are in backoff. This is useful for recovering from transient issues like DNS resolution problems caused by rate limiting.
+
+### Rate Limiting
+
+The `--rate` option controls the maximum number of crawls per second. This is useful when:
+
+- DNS resolution errors occur due to upstream rate limiting
+- You want to reduce load on network infrastructure
+- Crawling a large number of domains causes issues
+
+When rate limiting is enabled, domains are dispatched to workers at the specified rate regardless of the number of parallel workers. For example, with `--rate 1` and `--parallel 8`, only one new crawl will start per second even though 8 workers are available.
+
+A value of `-1` (the default) means unlimited, where domains are dispatched as fast as workers can accept them.
+
 ## Options
 
 | Flag | Env Variable | Default | Description |
 |------|--------------|---------|-------------|
 | `--age-days` | `CERT_OBS_CRAWL_AGE_DAYS` | `1` | Days since last crawl to qualify for re-crawl |
 | `--parallel` | `CERT_OBS_CRAWL_PARALLEL` | `2` | Number of domains to crawl concurrently |
+| `--rate` | `CERT_OBS_CRAWL_RATE` | `-1` | Maximum crawls per second, -1 for unlimited |
 | `--timeout` | - | `10s` | Timeout for each crawl operation |
 | `--verbose` | - | `false` | Enable verbose/debug logging |
+| `--ignore-errors` | `CERT_OBS_CRAWL_IGNORE_ERRORS` | `false` | Ignore backoff errors and crawl domains anyway |
+| `--include-non-public` | `CERT_OBS_CRAWL_INCLUDE_NON_PUBLIC` | `false` | Include non-public domains (manually submitted) |
 
 See [DATABASE.md](DATABASE.md) for database connection options.
 
@@ -71,6 +89,9 @@ cert-observatory crawl-domains
 # Weekly crawl with higher parallelism
 cert-observatory crawl-domains --age-days 7 --parallel 8
 
+# Rate-limited crawl (1 request per second)
+cert-observatory crawl-domains --rate 1
+
 # Using environment variables
 export CERT_OBS_CRAWL_AGE_DAYS=1
 export CERT_OBS_CRAWL_PARALLEL=4
@@ -78,6 +99,21 @@ cert-observatory crawl-domains
 
 # With verbose logging for debugging
 cert-observatory crawl-domains --verbose
+
+# Ignore backoff errors and recrawl domains that previously failed
+cert-observatory crawl-domains --ignore-errors
+
+# Include non-public (manually submitted) domains
+cert-observatory crawl-domains --include-non-public
+
+# Combine options: ignore errors and include non-public domains with rate limiting
+cert-observatory crawl-domains --ignore-errors --include-non-public --rate 5
+
+# Using environment variables for all options
+export CERT_OBS_CRAWL_IGNORE_ERRORS=true
+export CERT_OBS_CRAWL_INCLUDE_NON_PUBLIC=true
+export CERT_OBS_CRAWL_RATE=10
+cert-observatory crawl-domains
 ```
 
 ## Logging
