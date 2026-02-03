@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	// CloudflareRadarToplistURL is the URL for Cloudflare Radar Top 1k domains.
-	CloudflareRadarToplistURL = "https://api.cloudflare.com/client/v4/radar/datasets/ranking_top_1000"
+	// CloudflareRadarToplistURL is the URL for Cloudflare Radar Top 10k domains.
+	CloudflareRadarToplistURL = "https://api.cloudflare.com/client/v4/radar/datasets/ranking_top_10000"
 )
 
 // IngestToplistConfig contains configuration for the ingest-toplist command.

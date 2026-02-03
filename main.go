@@ -233,7 +233,8 @@ database with any new certificate chains.
 
 Domains are eligible for crawling when:
 - They are marked for automated crawling (auto_crawl = true)
-- They are not in automated backoff
+- They are not in automated backoff (unless --ignore-errors is set)
+- They are popular domains (unless --include-non-public is set)
 - Their last successful crawl is older than the effective age threshold
 
 The effective age is calculated as: (age_days * 24h) - 1h
@@ -250,6 +251,17 @@ This allows the job to run daily with a small overlap window for idempotency.`,
 					cfg.Parallel = v
 				}
 			}
+			if rate := os.Getenv("CERT_OBS_CRAWL_RATE"); rate != "" {
+				if v, err := strconv.Atoi(rate); err == nil {
+					cfg.Rate = v
+				}
+			}
+			if ignoreErrors := os.Getenv("CERT_OBS_CRAWL_IGNORE_ERRORS"); ignoreErrors != "" {
+				cfg.IgnoreErrors = ignoreErrors == "true" || ignoreErrors == "1"
+			}
+			if includeNonPublic := os.Getenv("CERT_OBS_CRAWL_INCLUDE_NON_PUBLIC"); includeNonPublic != "" {
+				cfg.IncludeNonPublic = includeNonPublic == "true" || includeNonPublic == "1"
+			}
 
 			applyDBEnvDefaults(cfg.DBConfig)
 
@@ -260,8 +272,11 @@ This allows the job to run daily with a small overlap window for idempotency.`,
 	// Crawl configuration flags
 	c.Flags().IntVar(&cfg.AgeDays, "age-days", 1, "Days since last crawl to qualify for re-crawl (env: CERT_OBS_CRAWL_AGE_DAYS)")
 	c.Flags().IntVar(&cfg.Parallel, "parallel", 2, "Number of domains to crawl concurrently (env: CERT_OBS_CRAWL_PARALLEL)")
+	c.Flags().IntVar(&cfg.Rate, "rate", -1, "Maximum crawls per second, -1 for unlimited (env: CERT_OBS_CRAWL_RATE)")
 	c.Flags().DurationVar(&cfg.Timeout, "timeout", 10*time.Second, "Timeout for each crawl operation")
 	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
+	c.Flags().BoolVar(&cfg.IgnoreErrors, "ignore-errors", false, "Ignore backoff errors and crawl domains anyway (env: CERT_OBS_CRAWL_IGNORE_ERRORS)")
+	c.Flags().BoolVar(&cfg.IncludeNonPublic, "include-non-public", false, "Include non-public domains (env: CERT_OBS_CRAWL_INCLUDE_NON_PUBLIC)")
 
 	// Database connection flags
 	c.Flags().StringVar(&cfg.DBConfig.Host, "db-host", "", "Database host (env: DB_HOST)")

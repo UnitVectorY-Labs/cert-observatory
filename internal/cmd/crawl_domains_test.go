@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"testing"
+	"time"
 )
 
 func TestCategorizeError(t *testing.T) {
@@ -84,5 +85,33 @@ func TestEffectiveAgeCalculationForCrawlDomains(t *testing.T) {
 			t.Errorf("effectiveAge for %d days = %d hours, want %d hours",
 				tt.ageDays, effectiveHours, tt.expectedHours)
 		}
+	}
+}
+
+func TestDefaultCrawlDomainsConfig(t *testing.T) {
+	cfg := DefaultCrawlDomainsConfig()
+
+	if cfg.AgeDays != 1 {
+		t.Errorf("AgeDays = %d, want 1", cfg.AgeDays)
+	}
+
+	if cfg.Parallel != 2 {
+		t.Errorf("Parallel = %d, want 2", cfg.Parallel)
+	}
+
+	if cfg.Rate != -1 {
+		t.Errorf("Rate = %d, want -1", cfg.Rate)
+	}
+
+	if cfg.Timeout != 10*time.Second {
+		t.Errorf("Timeout = %v, want 10s", cfg.Timeout)
+	}
+
+	if cfg.IgnoreErrors != false {
+		t.Errorf("IgnoreErrors = %v, want false", cfg.IgnoreErrors)
+	}
+
+	if cfg.IncludeNonPublic != false {
+		t.Errorf("IncludeNonPublic = %v, want false", cfg.IncludeNonPublic)
 	}
 }
