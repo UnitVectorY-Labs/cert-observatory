@@ -98,7 +98,9 @@ func New(cfg *Config, repo Repository, crawler Crawler) (*Server, error) {
 
 	// Define template functions
 	funcMap := template.FuncMap{
-		"safeHTML": func(s string) template.HTML {
+		// trustedHTML converts a string to template.HTML. Only use with trusted,
+		// developer-controlled content (e.g., RFC links in reserved domain errors).
+		"trustedHTML": func(s string) template.HTML {
 			return template.HTML(s)
 		},
 	}

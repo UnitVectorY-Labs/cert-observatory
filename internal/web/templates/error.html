@@ -2,7 +2,7 @@
 <div class="error-block fade-in">
     <h4>{{.Title}}</h4>
     {{if .MessageHTML}}
-    <p>{{.MessageHTML | safeHTML}}</p>
+    <p>{{.MessageHTML | trustedHTML}}</p>
     {{else}}
     <p>{{.Message}}</p>
     {{end}}

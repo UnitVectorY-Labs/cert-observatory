@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCheckReservedDomain(t *testing.T) {
 	tests := []struct {
@@ -138,7 +141,7 @@ func TestCheckReservedDomain(t *testing.T) {
 				return
 			}
 
-			if tt.wantReason != "" && !contains(result.Reason, tt.wantReason) {
+			if tt.wantReason != "" && !strings.Contains(result.Reason, tt.wantReason) {
 				t.Errorf("CheckReservedDomain(%q).Reason = %q, want to contain %q", tt.domain, result.Reason, tt.wantReason)
 			}
 
@@ -174,18 +177,4 @@ func TestIsReservedDomain(t *testing.T) {
 			}
 		})
 	}
-}
-
-// contains checks if s contains substr (case-insensitive partial match)
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
