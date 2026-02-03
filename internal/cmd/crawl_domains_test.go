@@ -107,11 +107,11 @@ func TestDefaultCrawlDomainsConfig(t *testing.T) {
 		t.Errorf("Timeout = %v, want 10s", cfg.Timeout)
 	}
 
-	if cfg.IgnoreErrors != false {
+	if cfg.IgnoreErrors {
 		t.Errorf("IgnoreErrors = %v, want false", cfg.IgnoreErrors)
 	}
 
-	if cfg.IncludeNonPublic != false {
+	if cfg.IncludeNonPublic {
 		t.Errorf("IncludeNonPublic = %v, want false", cfg.IncludeNonPublic)
 	}
 }

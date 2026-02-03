@@ -136,11 +136,11 @@ func TestCrawlDomainsOptions(t *testing.T) {
 	// Test default values
 	opts := &CrawlDomainsOptions{}
 
-	if opts.IgnoreErrors != false {
+	if opts.IgnoreErrors {
 		t.Errorf("IgnoreErrors should default to false")
 	}
 
-	if opts.IncludeNonPublic != false {
+	if opts.IncludeNonPublic {
 		t.Errorf("IncludeNonPublic should default to false")
 	}
 
@@ -150,11 +150,11 @@ func TestCrawlDomainsOptions(t *testing.T) {
 		IncludeNonPublic: true,
 	}
 
-	if opts.IgnoreErrors != true {
+	if !opts.IgnoreErrors {
 		t.Errorf("IgnoreErrors = %v, want true", opts.IgnoreErrors)
 	}
 
-	if opts.IncludeNonPublic != true {
+	if !opts.IncludeNonPublic {
 		t.Errorf("IncludeNonPublic = %v, want true", opts.IncludeNonPublic)
 	}
 }
