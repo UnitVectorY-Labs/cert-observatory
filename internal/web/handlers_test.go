@@ -436,3 +436,50 @@ func TestIsIPLiteral(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleInspect_ReservedDomain(t *testing.T) {
+	tests := []struct {
+		name       string
+		domain     string
+		wantStatus int
+		wantErr    string
+	}{
+		{"example.com", "example.com", http.StatusBadRequest, "reserved"},
+		{"www.example.com", "www.example.com", http.StatusBadRequest, "reserved"},
+		{"test TLD", "foo.test", http.StatusBadRequest, "reserved"},
+		{"local domain", "printer.local", http.StatusBadRequest, "local"},
+		{"onion domain", "hidden.onion", http.StatusBadRequest, "Tor"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockRepository{}
+			crawler := &mockCrawler{}
+
+			server, err := New(DefaultConfig(), repo, crawler)
+			if err != nil {
+				t.Fatalf("Failed to create server: %v", err)
+			}
+
+			form := url.Values{}
+			form.Set("domain", tt.domain)
+
+			req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("HX-Request", "true")
+			req.Host = "localhost:8080"
+
+			w := httptest.NewRecorder()
+			server.handleInspect(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("Expected status %d, got %d", tt.wantStatus, w.Code)
+			}
+
+			body := w.Body.String()
+			if !strings.Contains(body, tt.wantErr) {
+				t.Errorf("Expected error containing %q, got: %s", tt.wantErr, body)
+			}
+		})
+	}
+}

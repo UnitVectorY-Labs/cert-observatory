@@ -59,6 +59,7 @@ type CertViewData struct {
 	IsExpired            bool
 	IsNotYetValid        bool
 	IsCA                 bool
+	IsSelfSigned         bool
 	HasPathLenConstraint bool
 	PathLenConstraint    int
 	SerialNumber         string
@@ -70,6 +71,12 @@ type CertViewData struct {
 	SKI                  string
 	AKI                  string
 	PossibleIssuers      []string
+	// CertLabel is the human-readable label for this certificate's role in the chain
+	CertLabel string
+	// SubjectColor is the CSS color class for the subject DN
+	SubjectColor string
+	// IssuerColor is the CSS color class for the issuer DN
+	IssuerColor string
 }
 
 // ResultsViewData is the view model for the results template.
@@ -122,6 +129,7 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 	view.SubjectDN = cert.Subject.String()
 	view.IssuerDN = cert.Issuer.String()
 	view.IsCA = cert.IsCA
+	view.IsSelfSigned = isSelfSigned(cert)
 	view.HasPathLenConstraint = cert.BasicConstraintsValid && cert.MaxPathLen >= 0
 	view.PathLenConstraint = cert.MaxPathLen
 	view.SerialNumber = formatSerialNumber(cert.SerialNumber.Bytes())
@@ -262,6 +270,70 @@ func parsePEM(pem string) (*x509.Certificate, error) {
 	return info.Parsed, nil
 }
 
+// isSelfSigned checks if a certificate is self-signed by comparing Subject and Issuer.
+func isSelfSigned(cert *x509.Certificate) bool {
+	return cert.Subject.String() == cert.Issuer.String()
+}
+
+// chainColorPalette defines the colors used for matching subject/issuer pairs.
+// These colors are compatible with the dark theme.
+var chainColorPalette = []string{
+	"chain-color-1", // teal
+	"chain-color-2", // purple
+	"chain-color-3", // blue
+	"chain-color-4", // pink
+	"chain-color-5", // green
+}
+
+// assignChainLabelsAndColors assigns labels and color classes to certificates in a chain.
+func assignChainLabelsAndColors(chain []*CertViewData) {
+	if len(chain) == 0 {
+		return
+	}
+
+	// Build a map of SubjectDN to color class
+	dnColorMap := make(map[string]string)
+	colorIndex := 0
+
+	// First pass: assign colors to all unique SubjectDNs
+	for _, cert := range chain {
+		if _, exists := dnColorMap[cert.SubjectDN]; !exists {
+			dnColorMap[cert.SubjectDN] = chainColorPalette[colorIndex%len(chainColorPalette)]
+			colorIndex++
+		}
+	}
+
+	// Second pass: assign colors to subject and issuer, and determine labels
+	for i, cert := range chain {
+		// Assign subject color
+		cert.SubjectColor = dnColorMap[cert.SubjectDN]
+
+		// Assign issuer color (if issuer matches a subject in the chain)
+		if color, exists := dnColorMap[cert.IssuerDN]; exists {
+			cert.IssuerColor = color
+		}
+
+		// Determine the certificate label
+		if i == 0 {
+			// First certificate in chain (server/leaf certificate)
+			if cert.IsSelfSigned {
+				cert.CertLabel = "Self Signed Server Certificate"
+			} else {
+				cert.CertLabel = "Server Certificate"
+			}
+		} else {
+			// Not the first certificate
+			if cert.IsSelfSigned {
+				cert.CertLabel = "Root CA"
+			} else if cert.IsCA {
+				cert.CertLabel = "Intermediate CA"
+			} else {
+				cert.CertLabel = fmt.Sprintf("Certificate #%d", i)
+			}
+		}
+	}
+}
+
 func buildResultsViewData(result *DomainResult, isCached bool, canForce bool, waitTime time.Duration, lastCrawlFailed bool) *ResultsViewData {
 	data := &ResultsViewData{
 		Domain:          result.Domain,
@@ -282,6 +354,9 @@ func buildResultsViewData(result *DomainResult, isCached bool, canForce bool, wa
 	for _, cert := range result.Chain {
 		data.Chain = append(data.Chain, certToViewData(cert))
 	}
+
+	// Assign labels and colors to the chain
+	assignChainLabelsAndColors(data.Chain)
 
 	return data
 }

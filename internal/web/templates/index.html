@@ -82,6 +82,15 @@
 
     <script src="/static/js/htmx.min.js"></script>
     <script>
+        // Configure HTMX to swap content on error responses (4xx, 5xx)
+        document.body.addEventListener('htmx:beforeSwap', function(evt) {
+            // Allow swapping for 4xx and 5xx responses so error messages display
+            if (evt.detail.xhr.status >= 400 && evt.detail.xhr.status < 600) {
+                evt.detail.shouldSwap = true;
+                evt.detail.isError = false;
+            }
+        });
+
         // Copy PEM to clipboard
         function copyPEM(button, certHash) {
             const pemBlock = document.getElementById('pem-' + certHash);
