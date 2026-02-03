@@ -1,5 +1,5 @@
 {{define "results"}}
-<div class="results-section">
+<div class="results-section fade-in">
     <div class="results-toolbar">
         <div class="domain-info">
             <span class="domain-name">{{.Domain}}</span>
@@ -27,7 +27,7 @@
         {{range $index, $cert := .Chain}}
         <div class="cert-row">
             <div class="cert-row-header">
-                <span class="cert-position">{{if eq $index 0}}Leaf Certificate{{else if $cert.IsCA}}Intermediate CA{{else}}Certificate #{{$index}}{{end}}</span>
+                <span class="cert-position">{{$cert.CertLabel}}</span>
             </div>
             <div class="cert-row-content">
                 <div class="pem-panel">
@@ -40,11 +40,11 @@
                     <div class="detail-grid-2">
                         <div class="detail-item">
                             <div class="detail-label">Subject</div>
-                            <div class="detail-value-box">{{$cert.SubjectDN}}</div>
+                            <div class="detail-value-box {{$cert.SubjectColor}}">{{$cert.SubjectDN}}</div>
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Issuer</div>
-                            <div class="detail-value-box">{{$cert.IssuerDN}}</div>
+                            <div class="detail-value-box {{$cert.IssuerColor}}">{{$cert.IssuerDN}}</div>
                         </div>
                     </div>
 

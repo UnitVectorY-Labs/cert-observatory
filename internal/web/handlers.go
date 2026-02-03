@@ -52,6 +52,12 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for reserved domains (RFC 2606, .local, .onion, etc.)
+	if reservedInfo := domain.CheckReservedDomain(normalizedDomain); reservedInfo != nil {
+		s.renderReservedDomainError(w, r, reservedInfo)
+		return
+	}
+
 	// Check if we need to crawl or can use cached data
 	canRefresh, _, err := s.repo.CanStandardRefresh(r.Context(), normalizedDomain, s.config.StandardRefreshWindow)
 	if err != nil {
@@ -228,6 +234,7 @@ func (s *Server) performCrawl(ctx context.Context, domainName string, forced boo
 type ErrorData struct {
 	Title            string
 	Message          string
+	MessageHTML      string // HTML message (for RFC links, etc.)
 	HasCachedResults bool
 }
 
@@ -255,6 +262,40 @@ func (s *Server) renderError(w http.ResponseWriter, r *http.Request, title, mess
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render error page", "error", err)
 		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", title, message)
+	}
+}
+
+// renderReservedDomainError renders an error for reserved domain names.
+func (s *Server) renderReservedDomainError(w http.ResponseWriter, r *http.Request, info *domain.ReservedDomainInfo) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusBadRequest)
+
+	// Build HTML message with RFC link
+	messageHTML := info.Reason
+	if info.RFCLink != "" {
+		messageHTML += fmt.Sprintf(` See <a href="%s" target="_blank" rel="noopener noreferrer">the relevant RFC</a> for more information.`, info.RFCLink)
+	}
+
+	errData := &ErrorData{
+		Title:       "Reserved Domain",
+		Message:     info.Reason,
+		MessageHTML: messageHTML,
+	}
+
+	// For HTMX requests, just render the error fragment
+	if isHTMXRequest(r) {
+		if err := s.templates.ExecuteTemplate(w, "error", errData); err != nil {
+			s.logger.Error("failed to render error template", "error", err)
+			fmt.Fprintf(w, "<div class=\"error-block\"><h4>Reserved Domain</h4><p>%s</p></div>", info.Reason)
+		}
+		return
+	}
+
+	// For regular requests, render full page with error
+	pageData := &IndexData{Error: errData}
+	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
+		s.logger.Error("failed to render error page", "error", err)
+		fmt.Fprintf(w, "<div class=\"error-block\"><h4>Reserved Domain</h4><p>%s</p></div>", info.Reason)
 	}
 }
 

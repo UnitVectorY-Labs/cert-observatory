@@ -96,8 +96,15 @@ func New(cfg *Config, repo Repository, crawler Crawler) (*Server, error) {
 		logger = slog.Default()
 	}
 
-	// Parse templates
-	tmpl, err := template.ParseFS(templateFS, "templates/*.html")
+	// Define template functions
+	funcMap := template.FuncMap{
+		"safeHTML": func(s string) template.HTML {
+			return template.HTML(s)
+		},
+	}
+
+	// Parse templates with custom functions
+	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
