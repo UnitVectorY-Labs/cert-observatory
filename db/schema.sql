@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS chains (
   cert_hashes    bytea[] NOT NULL,
 
   -- Denormalized convenience columns (derived from cert_hashes)
+  -- Note: PostgreSQL arrays are 1-indexed, so cert_hashes[1] is the first element (leaf certificate)
   leaf_cert_hash bytea GENERATED ALWAYS AS (cert_hashes[1]) STORED,
   depth          integer GENERATED ALWAYS AS (array_length(cert_hashes, 1)) STORED,
 
@@ -123,7 +124,7 @@ CREATE TABLE IF NOT EXISTS chains (
 COMMENT ON TABLE chains IS
 'Deduplicated peer-provided chains. A chain is the ordered list returned by the server during TLS handshake.';
 COMMENT ON COLUMN chains.chain_hash IS 'sha256 of the ordered list of cert_hash values using an application-defined encoding (version 1: 4-byte count + concatenated hashes).';
-COMMENT ON COLUMN chains.cert_hashes IS 'Ordered array of certificate hashes, leaf-first.';
+COMMENT ON COLUMN chains.cert_hashes IS 'Ordered array of certificate hashes, leaf-first. PostgreSQL arrays are 1-indexed.';
 COMMENT ON COLUMN chains.leaf_cert_hash IS 'First certificate in the chain (derived from cert_hashes[1]).';
 COMMENT ON COLUMN chains.depth IS 'Count of certificates in the chain (derived from array_length).';
 
