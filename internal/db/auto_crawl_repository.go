@@ -11,8 +11,7 @@ import (
 
 // EligibleDomain represents a domain eligible for automated crawling.
 type EligibleDomain struct {
-	DomainID int64
-	Domain   string
+	Domain string
 }
 
 // CrawlDomainsOptions contains options for querying eligible domains.
@@ -71,12 +70,12 @@ func (r *Repository) GetEligibleDomainsForCrawl(ctx context.Context, effectiveAg
 	threshold := time.Now().Add(-effectiveAge)
 
 	query := `
-		SELECT domain_id, domain
+		SELECT domain
 		FROM domains
 		WHERE auto_crawl = true
 		  AND (no_retry_before IS NULL OR no_retry_before <= now())
 		  AND (last_success_at IS NULL OR last_success_at <= $1)
-		ORDER BY last_success_at NULLS FIRST, domain_id
+		ORDER BY last_success_at NULLS FIRST, domain
 		LIMIT $2
 	`
 
@@ -89,7 +88,7 @@ func (r *Repository) GetEligibleDomainsForCrawl(ctx context.Context, effectiveAg
 	var domains []*EligibleDomain
 	for rows.Next() {
 		d := &EligibleDomain{}
-		if err := rows.Scan(&d.DomainID, &d.Domain); err != nil {
+		if err := rows.Scan(&d.Domain); err != nil {
 			return nil, fmt.Errorf("scan domain: %w", err)
 		}
 		domains = append(domains, d)
@@ -135,8 +134,8 @@ func (r *Repository) RecordAutoCrawlFailure(ctx context.Context, domain string, 
 	}
 	defer tx.Rollback()
 
-	// Upsert domain and get current failure count
-	domainID, _, _, err := r.upsertDomain(ctx, tx, domain)
+	// Upsert domain
+	_, _, err = r.upsertDomain(ctx, tx, domain)
 	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("upsert domain: %w", err)
 	}
@@ -144,8 +143,8 @@ func (r *Repository) RecordAutoCrawlFailure(ctx context.Context, domain string, 
 	// Get current consecutive failures and increment
 	var currentFailures int
 	err = tx.QueryRowContext(ctx, `
-		SELECT consecutive_failures FROM domains WHERE domain_id = $1
-	`, domainID).Scan(&currentFailures)
+		SELECT consecutive_failures FROM domains WHERE domain = $1
+	`, domain).Scan(&currentFailures)
 	if err != nil && err != sql.ErrNoRows {
 		return time.Time{}, 0, fmt.Errorf("get consecutive failures: %w", err)
 	}
@@ -160,8 +159,8 @@ func (r *Repository) RecordAutoCrawlFailure(ctx context.Context, domain string, 
 			last_failure_at = $2,
 			consecutive_failures = $3,
 			no_retry_before = $4
-		WHERE domain_id = $1
-	`, domainID, crawlTime, newFailures, noRetryBefore)
+		WHERE domain = $1
+	`, domain, crawlTime, newFailures, noRetryBefore)
 	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("update domain failure: %w", err)
 	}
@@ -225,7 +224,7 @@ func (r *Repository) GetEligibleDomainsForCrawlWithOptions(ctx context.Context, 
 	threshold := time.Now().Add(-effectiveAge)
 
 	// Build the query dynamically based on options
-	query := `SELECT domain_id, domain FROM domains WHERE auto_crawl = true`
+	query := `SELECT domain FROM domains WHERE auto_crawl = true`
 
 	// Handle backoff logic
 	if !opts.IgnoreErrors {
@@ -238,7 +237,7 @@ func (r *Repository) GetEligibleDomainsForCrawlWithOptions(ctx context.Context, 
 	}
 
 	query += ` AND (last_success_at IS NULL OR last_success_at <= $1)`
-	query += ` ORDER BY last_success_at NULLS FIRST, domain_id LIMIT $2`
+	query += ` ORDER BY last_success_at NULLS FIRST, domain LIMIT $2`
 
 	rows, err := r.db.QueryContext(ctx, query, threshold, limit)
 	if err != nil {
@@ -249,7 +248,7 @@ func (r *Repository) GetEligibleDomainsForCrawlWithOptions(ctx context.Context, 
 	var domains []*EligibleDomain
 	for rows.Next() {
 		d := &EligibleDomain{}
-		if err := rows.Scan(&d.DomainID, &d.Domain); err != nil {
+		if err := rows.Scan(&d.Domain); err != nil {
 			return nil, fmt.Errorf("scan domain: %w", err)
 		}
 		domains = append(domains, d)
@@ -273,13 +272,12 @@ func (r *Repository) UpsertDomainFromToplist(ctx context.Context, domain string)
 	defer tx.Rollback()
 
 	// Check if domain exists
-	var domainID int64
 	var popularDomain, autoCrawl bool
 	err = tx.QueryRowContext(ctx, `
-		SELECT domain_id, popular_domain, auto_crawl
+		SELECT popular_domain, auto_crawl
 		FROM domains
 		WHERE domain = $1
-	`, domain).Scan(&domainID, &popularDomain, &autoCrawl)
+	`, domain).Scan(&popularDomain, &autoCrawl)
 
 	if err == sql.ErrNoRows {
 		// Insert new domain
@@ -305,8 +303,8 @@ func (r *Repository) UpsertDomainFromToplist(ctx context.Context, domain string)
 	needsUpdate := !popularDomain || !autoCrawl
 	if needsUpdate {
 		_, err = tx.ExecContext(ctx, `
-			UPDATE domains SET popular_domain = true, auto_crawl = true WHERE domain_id = $1
-		`, domainID)
+			UPDATE domains SET popular_domain = true, auto_crawl = true WHERE domain = $1
+		`, domain)
 		if err != nil {
 			return false, false, fmt.Errorf("update domain: %w", err)
 		}
@@ -337,13 +335,12 @@ func (r *Repository) BulkUpsertDomainsFromToplist(ctx context.Context, domains [
 
 	for _, domain := range domains {
 		// Check if exists
-		var domainID int64
 		var popularDomain, autoCrawl bool
 		err = tx.QueryRowContext(ctx, `
-			SELECT domain_id, popular_domain, auto_crawl
+			SELECT popular_domain, auto_crawl
 			FROM domains
 			WHERE domain = $1
-		`, domain).Scan(&domainID, &popularDomain, &autoCrawl)
+		`, domain).Scan(&popularDomain, &autoCrawl)
 
 		if err == sql.ErrNoRows {
 			// Insert new domain
@@ -366,8 +363,8 @@ func (r *Repository) BulkUpsertDomainsFromToplist(ctx context.Context, domains [
 		needsUpdate := !popularDomain || !autoCrawl
 		if needsUpdate {
 			_, err = tx.ExecContext(ctx, `
-				UPDATE domains SET popular_domain = true, auto_crawl = true WHERE domain_id = $1
-			`, domainID)
+				UPDATE domains SET popular_domain = true, auto_crawl = true WHERE domain = $1
+			`, domain)
 			if err != nil {
 				return inserted, updated, fmt.Errorf("update domain %s: %w", domain, err)
 			}
@@ -385,73 +382,22 @@ func (r *Repository) BulkUpsertDomainsFromToplist(ctx context.Context, domains [
 // InsertRootCertificate inserts a root certificate if it doesn't exist.
 // Returns true if inserted, false if already existed.
 func (r *Repository) InsertRootCertificate(ctx context.Context, certInfo *certutil.CertInfo) (bool, error) {
-	// Check if certificate already exists
-	var exists bool
-	err := r.db.QueryRowContext(ctx, `
-		SELECT EXISTS(SELECT 1 FROM certificates WHERE cert_hash = $1)
-	`, certInfo.CertHash).Scan(&exists)
-	if err != nil {
-		return false, fmt.Errorf("check certificate exists: %w", err)
-	}
-
-	if exists {
-		return false, nil
-	}
-
-	// Insert certificate
-	_, err = r.db.ExecContext(ctx, `
-		INSERT INTO certificates (cert_hash, pem, not_before, not_after, ski, aki)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, certInfo.CertHash, certInfo.PEM, certInfo.NotBefore, certInfo.NotAfter, nullableBytes(certInfo.SKI), nullableBytes(certInfo.AKI))
+	// Try to insert, do nothing on conflict (upsert by hash)
+	result, err := r.db.ExecContext(ctx, `
+		INSERT INTO certificates (cert_hash, der, subject, issuer, not_before, not_after, ski, aki)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (cert_hash) DO NOTHING
+	`, certInfo.CertHash, certInfo.DER, certInfo.Subject, certInfo.Issuer, certInfo.NotBefore, certInfo.NotAfter, nullableBytes(certInfo.SKI), nullableBytes(certInfo.AKI))
 	if err != nil {
 		return false, fmt.Errorf("insert certificate: %w", err)
 	}
 
-	return true, nil
-}
-
-// GetOrCreateRootSource gets or creates a root source by name.
-func (r *Repository) GetOrCreateRootSource(ctx context.Context, sourceName string) (int64, error) {
-	var sourceID int64
-
-	// Try to get existing
-	err := r.db.QueryRowContext(ctx, `
-		SELECT source_id FROM root_sources WHERE source_name = $1
-	`, sourceName).Scan(&sourceID)
-
-	if err == nil {
-		return sourceID, nil
-	}
-
-	if err != sql.ErrNoRows {
-		return 0, fmt.Errorf("query root source: %w", err)
-	}
-
-	// Insert new source
-	err = r.db.QueryRowContext(ctx, `
-		INSERT INTO root_sources (source_name, first_seen_at)
-		VALUES ($1, now())
-		RETURNING source_id
-	`, sourceName).Scan(&sourceID)
-
+	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("insert root source: %w", err)
+		return false, fmt.Errorf("get rows affected: %w", err)
 	}
 
-	return sourceID, nil
-}
-
-// AssociateRootCertWithSource associates a certificate with a root source.
-func (r *Repository) AssociateRootCertWithSource(ctx context.Context, sourceID int64, certHash []byte) error {
-	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO root_source_certs (source_id, cert_hash, added_at)
-		VALUES ($1, $2, now())
-		ON CONFLICT (source_id, cert_hash) DO NOTHING
-	`, sourceID, certHash)
-	if err != nil {
-		return fmt.Errorf("associate root cert: %w", err)
-	}
-	return nil
+	return rowsAffected > 0, nil
 }
 
 // CheckCertificatesExist checks which certificate hashes already exist.

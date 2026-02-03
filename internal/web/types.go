@@ -21,7 +21,10 @@ type DomainResult struct {
 // CertificateResult represents certificate data from the database.
 type CertificateResult struct {
 	CertHash  []byte
+	DER       []byte
 	PEM       string
+	Subject   string
+	Issuer    string
 	NotBefore time.Time
 	NotAfter  time.Time
 	SKI       []byte

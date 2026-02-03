@@ -32,7 +32,10 @@ func (wc *WebCrawler) Crawl(ctx context.Context, domain string) (*web.CrawlOutpu
 	for i, cert := range result.ChainInfo.Certs {
 		chain[i] = &web.CertificateResult{
 			CertHash:  cert.CertHash,
-			PEM:       cert.PEM,
+			DER:       cert.DER,
+			PEM:       cert.PEM(), // Convert DER to PEM on demand
+			Subject:   cert.Subject,
+			Issuer:    cert.Issuer,
 			NotBefore: cert.NotBefore,
 			NotAfter:  cert.NotAfter,
 			SKI:       cert.SKI,

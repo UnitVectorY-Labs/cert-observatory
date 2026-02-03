@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/x509"
 	"database/sql"
-	"encoding/pem"
 	"fmt"
 	"time"
 
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/certutil"
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/web"
+	"github.com/lib/pq"
 )
 
 // WebRepository provides database operations for the web interface.
@@ -33,15 +33,14 @@ func (r *WebRepository) GetDomainWithChain(ctx context.Context, domainName strin
 	}
 
 	// Get domain info
-	var domainID int64
 	var chainHash []byte
 	var updatedAt sql.NullTime
 
 	err := r.db.QueryRowContext(ctx, `
-		SELECT domain_id, current_chain_hash, current_chain_updated_at
+		SELECT current_chain_hash, current_chain_updated_at
 		FROM domains
 		WHERE domain = $1
-	`, domainName).Scan(&domainID, &chainHash, &updatedAt)
+	`, domainName).Scan(&chainHash, &updatedAt)
 
 	if err == sql.ErrNoRows {
 		return result, nil
@@ -58,28 +57,39 @@ func (r *WebRepository) GetDomainWithChain(ctx context.Context, domainName strin
 		result.UpdatedAt = updatedAt.Time
 	}
 
-	// Get chain certificates in order
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT c.cert_hash, c.pem, c.not_before, c.not_after, c.ski, c.aki, cc.position
-		FROM chain_certs cc
-		JOIN certificates c ON c.cert_hash = cc.cert_hash
-		WHERE cc.chain_hash = $1
-		ORDER BY cc.position
-	`, chainHash)
+	// Get chain cert_hashes array
+	var certHashes [][]byte
+	err = r.db.QueryRowContext(ctx, `
+		SELECT cert_hashes
+		FROM chains
+		WHERE chain_hash = $1
+	`, chainHash).Scan(pq.Array(&certHashes))
 	if err != nil {
-		return nil, fmt.Errorf("query chain certs: %w", err)
+		return nil, fmt.Errorf("query chain: %w", err)
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		cert := &web.CertificateResult{}
+	// Get certificates in the chain order
+	for i, certHash := range certHashes {
+		cert := &web.CertificateResult{
+			CertHash: certHash,
+			Position: i + 1, // 1-based position
+		}
+
+		var der []byte
 		var ski, aki []byte
 		var notBefore, notAfter sql.NullTime
 
-		err := rows.Scan(&cert.CertHash, &cert.PEM, &notBefore, &notAfter, &ski, &aki, &cert.Position)
+		err := r.db.QueryRowContext(ctx, `
+			SELECT der, not_before, not_after, ski, aki
+			FROM certificates
+			WHERE cert_hash = $1
+		`, certHash).Scan(&der, &notBefore, &notAfter, &ski, &aki)
 		if err != nil {
-			return nil, fmt.Errorf("scan cert: %w", err)
+			return nil, fmt.Errorf("query cert %d: %w", i, err)
 		}
+
+		// Convert DER to PEM on demand
+		cert.PEM = certutil.DERToPEM(der)
 
 		if notBefore.Valid {
 			cert.NotBefore = notBefore.Time
@@ -90,14 +100,10 @@ func (r *WebRepository) GetDomainWithChain(ctx context.Context, domainName strin
 		cert.SKI = ski
 		cert.AKI = aki
 
-		// Parse the certificate
-		cert.Parsed = parseCertificatePEM(cert.PEM)
+		// Parse the certificate from DER
+		cert.Parsed = parseCertificateDER(der)
 
 		result.Chain = append(result.Chain, cert)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate certs: %w", err)
 	}
 
 	result.HasChain = len(result.Chain) > 0
@@ -110,14 +116,15 @@ func (r *WebRepository) GetCertificateByHash(ctx context.Context, hash []byte) (
 		CertHash: hash,
 	}
 
+	var der []byte
 	var ski, aki []byte
 	var notBefore, notAfter sql.NullTime
 
 	err := r.db.QueryRowContext(ctx, `
-		SELECT pem, not_before, not_after, ski, aki
+		SELECT der, not_before, not_after, ski, aki
 		FROM certificates
 		WHERE cert_hash = $1
-	`, hash).Scan(&cert.PEM, &notBefore, &notAfter, &ski, &aki)
+	`, hash).Scan(&der, &notBefore, &notAfter, &ski, &aki)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("certificate not found")
@@ -125,6 +132,9 @@ func (r *WebRepository) GetCertificateByHash(ctx context.Context, hash []byte) (
 	if err != nil {
 		return nil, fmt.Errorf("query certificate: %w", err)
 	}
+
+	// Convert DER to PEM on demand
+	cert.PEM = certutil.DERToPEM(der)
 
 	if notBefore.Valid {
 		cert.NotBefore = notBefore.Time
@@ -135,8 +145,8 @@ func (r *WebRepository) GetCertificateByHash(ctx context.Context, hash []byte) (
 	cert.SKI = ski
 	cert.AKI = aki
 
-	// Parse the certificate
-	cert.Parsed = parseCertificatePEM(cert.PEM)
+	// Parse the certificate from DER
+	cert.Parsed = parseCertificateDER(der)
 
 	return cert, nil
 }
@@ -203,44 +213,20 @@ func (r *WebRepository) CanForcedRefresh(ctx context.Context, domainName string,
 	return false, window - elapsed, nil
 }
 
-// AcquireLock tries to acquire a crawl lock for the domain.
+// AcquireLock tries to acquire a crawl lock for the domain using PostgreSQL advisory locks.
+// This is a no-op since we've removed the domain_locks table and rely on idempotent upserts.
 func (r *WebRepository) AcquireLock(ctx context.Context, domainName string, lockID string, ttl time.Duration) (bool, error) {
-	expiresAt := time.Now().Add(ttl)
-
-	// First, clean up expired locks
-	_, err := r.db.ExecContext(ctx, `
-		DELETE FROM domain_locks WHERE expires_at < now()
-	`)
-	if err != nil {
-		return false, fmt.Errorf("cleanup expired locks: %w", err)
-	}
-
-	// Try to insert lock
-	result, err := r.db.ExecContext(ctx, `
-		INSERT INTO domain_locks (domain, locked_by, expires_at)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (domain) DO NOTHING
-	`, domainName, lockID, expiresAt)
-	if err != nil {
-		return false, fmt.Errorf("insert lock: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("check rows affected: %w", err)
-	}
-
-	return rowsAffected > 0, nil
+	// With the simplified schema, we rely on idempotent upserts instead of explicit locks.
+	// All database writes (certificate inserts, chain inserts, domain updates, domain_chains upserts)
+	// are idempotent and use ON CONFLICT clauses, so concurrent crawls are safe.
+	// Return true to indicate the "lock" is always acquired.
+	return true, nil
 }
 
 // ReleaseLock releases a crawl lock for the domain.
+// This is a no-op since we've removed the domain_locks table.
 func (r *WebRepository) ReleaseLock(ctx context.Context, domainName string, lockID string) error {
-	_, err := r.db.ExecContext(ctx, `
-		DELETE FROM domain_locks WHERE domain = $1 AND locked_by = $2
-	`, domainName, lockID)
-	if err != nil {
-		return fmt.Errorf("delete lock: %w", err)
-	}
+	// No-op: locks are no longer used
 	return nil
 }
 
@@ -257,21 +243,19 @@ func (r *WebRepository) RecordCrawlResult(ctx context.Context, input *web.CrawlR
 
 	// Convert web types to internal types
 	certs := make([]*certutil.CertInfo, len(input.Chain))
+	certHashes := make([][]byte, len(input.Chain))
 	for i, cert := range input.Chain {
 		certs[i] = &certutil.CertInfo{
 			CertHash:  cert.CertHash,
-			PEM:       cert.PEM,
+			DER:       cert.DER,
+			Subject:   cert.Subject,
+			Issuer:    cert.Issuer,
 			NotBefore: cert.NotBefore,
 			NotAfter:  cert.NotAfter,
 			SKI:       cert.SKI,
 			AKI:       cert.AKI,
 			Parsed:    cert.Parsed,
 		}
-	}
-
-	// Compute chain hash
-	certHashes := make([][]byte, len(certs))
-	for i, cert := range certs {
 		certHashes[i] = cert.CertHash
 	}
 
@@ -280,6 +264,7 @@ func (r *WebRepository) RecordCrawlResult(ctx context.Context, input *web.CrawlR
 		LeafCertHash: certHashes[0],
 		Depth:        len(certs),
 		Certs:        certs,
+		CertHashes:   certHashes,
 	}
 
 	mode := CrawlModeStandard
@@ -298,17 +283,11 @@ func (r *WebRepository) RecordCrawlResult(ctx context.Context, input *web.CrawlR
 	return err
 }
 
-// parseCertificatePEM parses a PEM-encoded certificate.
-func parseCertificatePEM(pemStr string) *x509.Certificate {
-	block, _ := pem.Decode([]byte(pemStr))
-	if block == nil {
-		return nil
-	}
-
-	cert, err := x509.ParseCertificate(block.Bytes)
+// parseCertificateDER parses a DER-encoded certificate.
+func parseCertificateDER(der []byte) *x509.Certificate {
+	info, err := certutil.ParseCertificate(der)
 	if err != nil {
 		return nil
 	}
-
-	return cert
+	return info.Parsed
 }

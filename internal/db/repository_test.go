@@ -9,7 +9,7 @@ import (
 
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/certutil"
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/db"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 // skipIfNoPostgres skips the test if no Postgres connection is available.
@@ -58,11 +58,9 @@ func cleanupTables(t *testing.T, sqlDB *sql.DB) {
 	t.Helper()
 
 	tables := []string{
-		"domain_chain_states",
+		"domain_chains",
 		"domains",
-		"chain_certs",
 		"chains",
-		"cert_signers",
 		"certificates",
 	}
 
@@ -83,6 +81,12 @@ func createMockCertInfo(t *testing.T, seed byte) *certutil.CertInfo {
 		hash[i] = seed + byte(i)
 	}
 
+	// Create valid DER-like bytes (minimal, just for testing)
+	der := make([]byte, 100)
+	for i := range der {
+		der[i] = seed + byte(i)
+	}
+
 	ski := make([]byte, 20)
 	for i := range ski {
 		ski[i] = seed + byte(i) + 100
@@ -95,8 +99,9 @@ func createMockCertInfo(t *testing.T, seed byte) *certutil.CertInfo {
 
 	return &certutil.CertInfo{
 		CertHash:  hash,
-		PEM:       "-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\n",
-		DER:       []byte("mock-der"),
+		DER:       der,
+		Subject:   "CN=Test Subject " + string(seed),
+		Issuer:    "CN=Test Issuer " + string(seed),
 		NotBefore: time.Now().Add(-24 * time.Hour),
 		NotAfter:  time.Now().Add(365 * 24 * time.Hour),
 		SKI:       ski,
@@ -118,10 +123,11 @@ func createMockChainInfo(t *testing.T, certs []*certutil.CertInfo) *certutil.Cha
 		LeafCertHash: certs[0].CertHash,
 		Depth:        len(certs),
 		Certs:        certs,
+		CertHashes:   certHashes,
 	}
 }
 
-func TestRepository_FirstCrawlInsertsDomainCertsChainState(t *testing.T) {
+func TestRepository_FirstCrawlInsertsDomainCertsChain(t *testing.T) {
 	database := skipIfNoPostgres(t)
 	defer database.Close()
 
@@ -159,13 +165,13 @@ func TestRepository_FirstCrawlInsertsDomainCertsChainState(t *testing.T) {
 	if !stats.ChainInserted {
 		t.Error("Expected chain to be inserted")
 	}
-	if !stats.ChainStateNewInterval {
-		t.Error("Expected new chain state interval")
+	if !stats.DomainChainInserted {
+		t.Error("Expected domain_chain to be inserted")
 	}
 
 	// Verify domain exists
-	var domainID int64
-	err = database.QueryRow("SELECT domain_id FROM domains WHERE domain = $1", "example.com").Scan(&domainID)
+	var domainName string
+	err = database.QueryRow("SELECT domain FROM domains WHERE domain = $1", "example.com").Scan(&domainName)
 	if err != nil {
 		t.Fatalf("Domain not found: %v", err)
 	}
@@ -190,28 +196,18 @@ func TestRepository_FirstCrawlInsertsDomainCertsChainState(t *testing.T) {
 		t.Errorf("Expected 1 chain, got %d", chainCount)
 	}
 
-	// Verify chain_certs
-	var chainCertCount int
-	err = database.QueryRow("SELECT COUNT(*) FROM chain_certs").Scan(&chainCertCount)
+	// Verify domain_chains
+	var domainChainCount int
+	err = database.QueryRow("SELECT COUNT(*) FROM domain_chains WHERE domain = $1", "example.com").Scan(&domainChainCount)
 	if err != nil {
-		t.Fatalf("Failed to count chain_certs: %v", err)
+		t.Fatalf("Failed to count domain_chains: %v", err)
 	}
-	if chainCertCount != 3 {
-		t.Errorf("Expected 3 chain_certs, got %d", chainCertCount)
-	}
-
-	// Verify domain_chain_states
-	var stateCount int
-	err = database.QueryRow("SELECT COUNT(*) FROM domain_chain_states WHERE domain_id = $1 AND ended_at IS NULL", domainID).Scan(&stateCount)
-	if err != nil {
-		t.Fatalf("Failed to count chain states: %v", err)
-	}
-	if stateCount != 1 {
-		t.Errorf("Expected 1 active chain state, got %d", stateCount)
+	if domainChainCount != 1 {
+		t.Errorf("Expected 1 domain_chain, got %d", domainChainCount)
 	}
 }
 
-func TestRepository_SecondCrawlSameChainUpdatesInterval(t *testing.T) {
+func TestRepository_SecondCrawlSameChainUpdatesCount(t *testing.T) {
 	database := skipIfNoPostgres(t)
 	defer database.Close()
 
@@ -241,9 +237,9 @@ func TestRepository_SecondCrawlSameChainUpdatesInterval(t *testing.T) {
 	// Get initial seen_count
 	var initialSeenCount int64
 	err = database.QueryRow(`
-		SELECT seen_count FROM domain_chain_states 
-		WHERE ended_at IS NULL AND chain_hash = $1
-	`, chainInfo.ChainHash).Scan(&initialSeenCount)
+		SELECT seen_count FROM domain_chains 
+		WHERE domain = $1 AND chain_hash = $2
+	`, "same-chain.example.com", chainInfo.ChainHash).Scan(&initialSeenCount)
 	if err != nil {
 		t.Fatalf("Failed to get initial seen_count: %v", err)
 	}
@@ -255,17 +251,20 @@ func TestRepository_SecondCrawlSameChainUpdatesInterval(t *testing.T) {
 		t.Fatalf("Second crawl failed: %v", err)
 	}
 
-	// Verify no new interval was created
-	if stats.ChainStateNewInterval {
-		t.Error("Expected no new interval for same chain")
+	// Verify domain_chain was updated (not inserted)
+	if stats.DomainChainInserted {
+		t.Error("Expected no new domain_chain for same chain")
+	}
+	if !stats.DomainChainUpdated {
+		t.Error("Expected domain_chain to be updated")
 	}
 
 	// Verify seen_count increased
 	var newSeenCount int64
 	err = database.QueryRow(`
-		SELECT seen_count FROM domain_chain_states 
-		WHERE ended_at IS NULL AND chain_hash = $1
-	`, chainInfo.ChainHash).Scan(&newSeenCount)
+		SELECT seen_count FROM domain_chains 
+		WHERE domain = $1 AND chain_hash = $2
+	`, "same-chain.example.com", chainInfo.ChainHash).Scan(&newSeenCount)
 	if err != nil {
 		t.Fatalf("Failed to get new seen_count: %v", err)
 	}
@@ -275,105 +274,99 @@ func TestRepository_SecondCrawlSameChainUpdatesInterval(t *testing.T) {
 			initialSeenCount, initialSeenCount+1, newSeenCount)
 	}
 
-	// Verify only one interval exists
-	var stateCount int
-	err = database.QueryRow(`SELECT COUNT(*) FROM domain_chain_states`).Scan(&stateCount)
+	// Verify only one domain_chain row exists
+	var dcCount int
+	err = database.QueryRow(`SELECT COUNT(*) FROM domain_chains`).Scan(&dcCount)
 	if err != nil {
-		t.Fatalf("Failed to count states: %v", err)
+		t.Fatalf("Failed to count domain_chains: %v", err)
 	}
-	if stateCount != 1 {
-		t.Errorf("Expected 1 state interval, got %d", stateCount)
+	if dcCount != 1 {
+		t.Errorf("Expected 1 domain_chain, got %d", dcCount)
 	}
 }
 
-func TestRepository_ChangedChainClosesOldInterval(t *testing.T) {
+func TestRepository_DomainOscillationBetweenChains(t *testing.T) {
 	database := skipIfNoPostgres(t)
 	defer database.Close()
 
 	ctx := context.Background()
 	repo := db.NewRepository(database)
 
-	// First chain
-	certs1 := []*certutil.CertInfo{
+	// Chain A
+	certsA := []*certutil.CertInfo{
 		createMockCertInfo(t, 30),
 	}
-	chainInfo1 := createMockChainInfo(t, certs1)
+	chainInfoA := createMockChainInfo(t, certsA)
 
-	result1 := &db.CrawlResult{
-		Domain:    "changing.example.com",
-		ChainInfo: chainInfo1,
-		CrawlTime: time.Now(),
-		Mode:      db.CrawlModeStandard,
-	}
-
-	// First crawl
-	_, err := repo.RecordSuccessfulCrawl(ctx, result1)
-	if err != nil {
-		t.Fatalf("First crawl failed: %v", err)
-	}
-
-	// Second chain (different)
-	certs2 := []*certutil.CertInfo{
+	// Chain B
+	certsB := []*certutil.CertInfo{
 		createMockCertInfo(t, 40),
 		createMockCertInfo(t, 50),
 	}
-	chainInfo2 := createMockChainInfo(t, certs2)
+	chainInfoB := createMockChainInfo(t, certsB)
 
-	result2 := &db.CrawlResult{
-		Domain:    "changing.example.com",
-		ChainInfo: chainInfo2,
+	domain := "oscillating.example.com"
+
+	// Crawl with chain A
+	resultA := &db.CrawlResult{
+		Domain:    domain,
+		ChainInfo: chainInfoA,
+		CrawlTime: time.Now(),
+		Mode:      db.CrawlModeStandard,
+	}
+	_, err := repo.RecordSuccessfulCrawl(ctx, resultA)
+	if err != nil {
+		t.Fatalf("First crawl (A) failed: %v", err)
+	}
+
+	// Crawl with chain B
+	resultB := &db.CrawlResult{
+		Domain:    domain,
+		ChainInfo: chainInfoB,
 		CrawlTime: time.Now().Add(time.Second),
 		Mode:      db.CrawlModeStandard,
 	}
-
-	// Second crawl with different chain
-	stats, err := repo.RecordSuccessfulCrawl(ctx, result2)
+	_, err = repo.RecordSuccessfulCrawl(ctx, resultB)
 	if err != nil {
-		t.Fatalf("Second crawl failed: %v", err)
+		t.Fatalf("Second crawl (B) failed: %v", err)
 	}
 
-	if !stats.ChainStateNewInterval {
-		t.Error("Expected new interval for different chain")
+	// Crawl with chain A again (oscillation back)
+	resultA.CrawlTime = time.Now().Add(2 * time.Second)
+	stats, err := repo.RecordSuccessfulCrawl(ctx, resultA)
+	if err != nil {
+		t.Fatalf("Third crawl (A again) failed: %v", err)
 	}
 
-	if !stats.CurrentChainChanged {
-		t.Error("Expected current chain to change")
+	// Verify no new domain_chain was inserted for the oscillation back
+	if stats.DomainChainInserted {
+		t.Error("Expected no new domain_chain when oscillating back to chain A")
+	}
+	if !stats.DomainChainUpdated {
+		t.Error("Expected domain_chain for chain A to be updated")
 	}
 
-	// Verify old interval is closed
-	var closedCount int
+	// Verify we still have exactly 2 domain_chains (A and B)
+	var dcCount int
+	err = database.QueryRow(`SELECT COUNT(*) FROM domain_chains WHERE domain = $1`, domain).Scan(&dcCount)
+	if err != nil {
+		t.Fatalf("Failed to count domain_chains: %v", err)
+	}
+	if dcCount != 2 {
+		t.Errorf("Expected 2 domain_chains, got %d", dcCount)
+	}
+
+	// Verify chain A has seen_count = 2
+	var seenCountA int64
 	err = database.QueryRow(`
-		SELECT COUNT(*) FROM domain_chain_states 
-		WHERE ended_at IS NOT NULL
-	`).Scan(&closedCount)
+		SELECT seen_count FROM domain_chains 
+		WHERE domain = $1 AND chain_hash = $2
+	`, domain, chainInfoA.ChainHash).Scan(&seenCountA)
 	if err != nil {
-		t.Fatalf("Failed to count closed states: %v", err)
+		t.Fatalf("Failed to get seen_count for chain A: %v", err)
 	}
-	if closedCount != 1 {
-		t.Errorf("Expected 1 closed interval, got %d", closedCount)
-	}
-
-	// Verify new interval is current
-	var activeCount int
-	err = database.QueryRow(`
-		SELECT COUNT(*) FROM domain_chain_states 
-		WHERE ended_at IS NULL AND chain_hash = $1
-	`, chainInfo2.ChainHash).Scan(&activeCount)
-	if err != nil {
-		t.Fatalf("Failed to count active states: %v", err)
-	}
-	if activeCount != 1 {
-		t.Errorf("Expected 1 active interval with new chain, got %d", activeCount)
-	}
-
-	// Verify total intervals
-	var totalCount int
-	err = database.QueryRow(`SELECT COUNT(*) FROM domain_chain_states`).Scan(&totalCount)
-	if err != nil {
-		t.Fatalf("Failed to count total states: %v", err)
-	}
-	if totalCount != 2 {
-		t.Errorf("Expected 2 total intervals, got %d", totalCount)
+	if seenCountA != 2 {
+		t.Errorf("Expected seen_count = 2 for chain A, got %d", seenCountA)
 	}
 }
 
@@ -394,13 +387,12 @@ func TestRepository_FailedCrawlUpdatesFailureFields(t *testing.T) {
 	}
 
 	// Verify domain was created
-	var domainID int64
 	var consecutiveFailures int
 	var lastFailureAt time.Time
 	err = database.QueryRow(`
-		SELECT domain_id, consecutive_failures, last_failure_at 
+		SELECT consecutive_failures, last_failure_at 
 		FROM domains WHERE domain = $1
-	`, domain).Scan(&domainID, &consecutiveFailures, &lastFailureAt)
+	`, domain).Scan(&consecutiveFailures, &lastFailureAt)
 	if err != nil {
 		t.Fatalf("Failed to query domain: %v", err)
 	}
@@ -426,14 +418,14 @@ func TestRepository_FailedCrawlUpdatesFailureFields(t *testing.T) {
 		t.Errorf("Expected consecutive_failures = 2, got %d", consecutiveFailures)
 	}
 
-	// Verify no chain states were created
-	var stateCount int
-	err = database.QueryRow(`SELECT COUNT(*) FROM domain_chain_states WHERE domain_id = $1`, domainID).Scan(&stateCount)
+	// Verify no domain_chains were created
+	var dcCount int
+	err = database.QueryRow(`SELECT COUNT(*) FROM domain_chains WHERE domain = $1`, domain).Scan(&dcCount)
 	if err != nil {
-		t.Fatalf("Failed to count chain states: %v", err)
+		t.Fatalf("Failed to count domain_chains: %v", err)
 	}
-	if stateCount != 0 {
-		t.Errorf("Expected 0 chain states for failed crawl, got %d", stateCount)
+	if dcCount != 0 {
+		t.Errorf("Expected 0 domain_chains for failed crawl, got %d", dcCount)
 	}
 }
 
@@ -486,5 +478,122 @@ func TestRepository_SuccessAfterFailureResetsCounter(t *testing.T) {
 	}
 	if failures != 0 {
 		t.Errorf("Expected 0 failures after success, got %d", failures)
+	}
+}
+
+func TestRepository_InsertSameCertificateTwice(t *testing.T) {
+	database := skipIfNoPostgres(t)
+	defer database.Close()
+
+	ctx := context.Background()
+	repo := db.NewRepository(database)
+
+	// Create same certificate twice with different domains
+	cert := createMockCertInfo(t, 70)
+	chainInfo := createMockChainInfo(t, []*certutil.CertInfo{cert})
+
+	// First crawl
+	result1 := &db.CrawlResult{
+		Domain:    "domain1.example.com",
+		ChainInfo: chainInfo,
+		CrawlTime: time.Now(),
+		Mode:      db.CrawlModeStandard,
+	}
+	stats1, err := repo.RecordSuccessfulCrawl(ctx, result1)
+	if err != nil {
+		t.Fatalf("First crawl failed: %v", err)
+	}
+	if stats1.CertsInserted != 1 {
+		t.Errorf("Expected 1 cert inserted on first crawl, got %d", stats1.CertsInserted)
+	}
+
+	// Second crawl with same certificate
+	result2 := &db.CrawlResult{
+		Domain:    "domain2.example.com",
+		ChainInfo: chainInfo,
+		CrawlTime: time.Now(),
+		Mode:      db.CrawlModeStandard,
+	}
+	stats2, err := repo.RecordSuccessfulCrawl(ctx, result2)
+	if err != nil {
+		t.Fatalf("Second crawl failed: %v", err)
+	}
+	if stats2.CertsInserted != 0 {
+		t.Errorf("Expected 0 certs inserted on second crawl, got %d", stats2.CertsInserted)
+	}
+
+	// Verify only one certificate row exists
+	var certCount int
+	err = database.QueryRow("SELECT COUNT(*) FROM certificates").Scan(&certCount)
+	if err != nil {
+		t.Fatalf("Failed to count certificates: %v", err)
+	}
+	if certCount != 1 {
+		t.Errorf("Expected 1 certificate, got %d", certCount)
+	}
+}
+
+func TestRepository_InsertSameChainTwice(t *testing.T) {
+	database := skipIfNoPostgres(t)
+	defer database.Close()
+
+	ctx := context.Background()
+	repo := db.NewRepository(database)
+
+	// Create chain
+	certs := []*certutil.CertInfo{
+		createMockCertInfo(t, 80),
+		createMockCertInfo(t, 81),
+	}
+	chainInfo := createMockChainInfo(t, certs)
+
+	// First crawl
+	result1 := &db.CrawlResult{
+		Domain:    "chain1.example.com",
+		ChainInfo: chainInfo,
+		CrawlTime: time.Now(),
+		Mode:      db.CrawlModeStandard,
+	}
+	stats1, err := repo.RecordSuccessfulCrawl(ctx, result1)
+	if err != nil {
+		t.Fatalf("First crawl failed: %v", err)
+	}
+	if !stats1.ChainInserted {
+		t.Error("Expected chain to be inserted on first crawl")
+	}
+
+	// Second crawl with same chain, different domain
+	result2 := &db.CrawlResult{
+		Domain:    "chain2.example.com",
+		ChainInfo: chainInfo,
+		CrawlTime: time.Now(),
+		Mode:      db.CrawlModeStandard,
+	}
+	stats2, err := repo.RecordSuccessfulCrawl(ctx, result2)
+	if err != nil {
+		t.Fatalf("Second crawl failed: %v", err)
+	}
+	if stats2.ChainInserted {
+		t.Error("Expected chain to NOT be inserted on second crawl")
+	}
+
+	// Verify only one chain row exists
+	var chainCount int
+	err = database.QueryRow("SELECT COUNT(*) FROM chains").Scan(&chainCount)
+	if err != nil {
+		t.Fatalf("Failed to count chains: %v", err)
+	}
+	if chainCount != 1 {
+		t.Errorf("Expected 1 chain, got %d", chainCount)
+	}
+
+	// Verify chain ordering is preserved
+	var certHashesArray [][]byte
+	err = database.QueryRow("SELECT cert_hashes FROM chains WHERE chain_hash = $1", chainInfo.ChainHash).Scan(pq.Array(&certHashesArray))
+	if err != nil {
+		t.Fatalf("Failed to get cert_hashes: %v", err)
+	}
+	if len(certHashesArray) != 2 {
+		t.Errorf("Expected 2 cert_hashes, got %d", len(certHashesArray))
 	}
 }

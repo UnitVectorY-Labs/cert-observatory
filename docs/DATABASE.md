@@ -31,22 +31,13 @@ Immutable certificate catalog. One row per unique certificate, keyed by SHA-256 
 |--------|------|-------------|
 | `cert_hash` | bytea (PK) | SHA-256 hash of DER-encoded certificate (32 bytes) |
 | `first_seen_at` | timestamptz | When this certificate was first seen |
-| `pem` | text | PEM-encoded certificate |
+| `der` | bytea | DER-encoded certificate bytes |
+| `subject` | text | Subject distinguished name (RFC 2253 format) |
+| `issuer` | text | Issuer distinguished name (RFC 2253 format) |
 | `not_before` | timestamptz | Certificate validity start time |
 | `not_after` | timestamptz | Certificate validity end time |
 | `ski` | bytea | Subject Key Identifier (if present) |
 | `aki` | bytea | Authority Key Identifier (if present) |
-
-### cert_signers
-
-Many-to-many mapping of which certificates can sign which other certificates. Supports cross-signing analysis.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `subject_cert_hash` | bytea (PK) | Certificate being signed |
-| `issuer_cert_hash` | bytea (PK) | Certificate that signs the subject certificate |
-| `first_seen_at` | timestamptz | When this relationship was first observed |
-| `is_verified` | boolean | True if signature was cryptographically verified |
 
 ### chains
 
@@ -55,19 +46,10 @@ Deduplicated peer-provided chains. A chain is the ordered list returned by the s
 | Column | Type | Description |
 |--------|------|-------------|
 | `chain_hash` | bytea (PK) | SHA-256 of the ordered list of cert_hash values |
-| `created_at` | timestamptz | When this chain was first observed |
-| `leaf_cert_hash` | bytea | First certificate in the peer-provided chain |
-| `depth` | integer | Number of certificates in the chain (1-20) |
-
-### chain_certs
-
-Ordered chain membership. Stores the exact peer-provided chain order.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `chain_hash` | bytea (PK) | Reference to chains table |
-| `position` | smallint (PK) | 1-based position in the chain (1 = leaf) |
-| `cert_hash` | bytea | Reference to certificates table |
+| `first_seen_at` | timestamptz | When this chain was first observed |
+| `cert_hashes` | bytea[] | Ordered array of certificate hashes (leaf-first) |
+| `leaf_cert_hash` | bytea (GENERATED) | First certificate in the chain (derived from cert_hashes[1]) |
+| `depth` | integer (GENERATED) | Number of certificates in the chain (derived from array_length) |
 
 ### domains
 
@@ -75,8 +57,7 @@ Normalized domain targets (TLS SNI). Stores latest chain pointer, rate limit tim
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `domain_id` | bigserial (PK) | Auto-generated domain ID |
-| `domain` | text (unique) | Normalized domain (lowercase, no trailing dot) |
+| `domain` | text (PK) | Normalized domain (lowercase, no trailing dot) |
 | `first_seen_at` | timestamptz | When this domain was first seen |
 | `popular_domain` | boolean | True if domain appeared on imported popular list |
 | `auto_crawl` | boolean | True if automated crawling is enabled |
@@ -91,51 +72,18 @@ Normalized domain targets (TLS SNI). Stores latest chain pointer, rate limit tim
 | `consecutive_failures` | integer | Count of consecutive failures |
 | `no_retry_before` | timestamptz | Automated crawling retry wait time |
 
-### domain_chain_states
+### domain_chains
 
-History of unique chain states per domain stored as intervals.
+One row per unique chain ever observed for a domain. No duplicates on oscillation between chains.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `state_id` | bigserial (PK) | Auto-generated state ID |
-| `domain_id` | bigint | Reference to domains table |
-| `chain_hash` | bytea | Reference to chains table |
-| `first_seen_at` | timestamptz | When this chain was first seen for this domain |
-| `last_seen_at` | timestamptz | When this chain was last seen |
-| `ended_at` | timestamptz | When this chain stopped being current (NULL = current) |
-| `seen_count` | bigint | Number of successful observations |
+| `domain` | text (PK) | Reference to domains table |
+| `chain_hash` | bytea (PK) | Reference to chains table |
+| `first_seen_at` | timestamptz | When this chain was first observed for this domain |
+| `last_seen_at` | timestamptz | When this chain was last observed for this domain |
+| `seen_count` | bigint | Total number of successful observations |
 | `last_mode` | crawl_mode | How the most recent observation was triggered |
-
-### domain_locks
-
-Advisory locks for preventing concurrent crawls of the same domain.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `domain` | text (PK) | Domain being locked |
-| `locked_at` | timestamptz | When the lock was acquired |
-| `locked_by` | text | Identifier of the lock holder |
-| `expires_at` | timestamptz | When the lock automatically expires |
-
-### root_sources (optional)
-
-Named sources for root certificate ingestion.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `source_id` | bigserial (PK) | Auto-generated source ID |
-| `source_name` | text (unique) | Name of the root source |
-| `first_seen_at` | timestamptz | When this source was first added |
-
-### root_source_certs (optional)
-
-Mapping of certificates to a root source.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `source_id` | bigint (PK) | Reference to root_sources table |
-| `cert_hash` | bytea (PK) | Reference to certificates table |
-| `added_at` | timestamptz | When this certificate was added to this source |
 
 ## Types
 
@@ -145,3 +93,17 @@ Enum indicating how a crawl was triggered:
 - `standard` - Normal UI fetch
 - `forced` - Forced refresh by user
 - `auto` - Automated background crawl
+
+## Design Principles
+
+### Storage Goals
+
+- **Content-addressed keys**: Certificates and chains are keyed by SHA-256 hashes
+- **Domain text as primary key**: No surrogate integer IDs for domains
+- **One row per unique chain per domain**: No duplicates when oscillating between chains
+
+### Non-goals
+
+- No trust validation or "is valid" computation
+- No verified issuer graph building
+- No per-crawl logs (only timestamps and counts)
