@@ -35,6 +35,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(migrateCmd())
 	root.AddCommand(ingestToplistCmd())
 	root.AddCommand(ingestRootsCmd())
+	root.AddCommand(addCertCmd())
 
 	return root
 }
@@ -344,11 +345,13 @@ func ingestRootsCmd() *cobra.Command {
 		Short: "Ingest root certificates from trusted sources",
 		Long: `Fetches and ingests root certificates (PEM format) into the certificate catalog.
 
-Current sources:
-- Mozilla CCADB (Included Roots with Websites trust bit)
+The root sources are configured in the embedded roots.yaml file:
+- Apple root certificates
+- Google root certificates
+- Microsoft root certificates
+- Mozilla root certificates
 
-Certificates are inserted if not already present. The operation is idempotent.
-Root certificates are tracked via the root_sources and root_source_certs tables.`,
+Certificates are inserted if not already present. The operation is idempotent.`,
 		RunE: func(c *cobra.Command, args []string) error {
 			applyDBEnvDefaults(cfg.DBConfig)
 			return cmd.IngestRoots(context.Background(), cfg)
@@ -356,6 +359,43 @@ Root certificates are tracked via the root_sources and root_source_certs tables.
 	}
 
 	// Ingest configuration flags
+	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
+
+	// Database connection flags
+	c.Flags().StringVar(&cfg.DBConfig.Host, "db-host", "", "Database host (env: DB_HOST)")
+	c.Flags().IntVar(&cfg.DBConfig.Port, "db-port", 0, "Database port (env: DB_PORT)")
+	c.Flags().StringVar(&cfg.DBConfig.User, "db-user", "", "Database user (env: DB_USER)")
+	c.Flags().StringVar(&cfg.DBConfig.Password, "db-password", "", "Database password (env: DB_PASSWORD)")
+	c.Flags().StringVar(&cfg.DBConfig.Database, "db-name", "", "Database name (env: DB_NAME)")
+	c.Flags().StringVar(&cfg.DBConfig.SSLMode, "db-sslmode", "", "Database SSL mode (env: DB_SSLMODE)")
+
+	return c
+}
+
+func addCertCmd() *cobra.Command {
+	cfg := cmd.DefaultAddCertConfig()
+	cfg.DBConfig = &db.Config{}
+
+	c := &cobra.Command{
+		Use:   "add-cert",
+		Short: "Add certificates from a PEM file to the certificate catalog",
+		Long: `Parses a PEM file containing one or more certificates and ingests them
+into the certificate catalog. This is useful for adding root or intermediate
+certificates that may not be returned by servers during TLS handshakes.
+
+Certificates are inserted if not already present. The operation is idempotent.`,
+		RunE: func(c *cobra.Command, args []string) error {
+			if cfg.PEMFile == "" {
+				return fmt.Errorf("--pem-file is required")
+			}
+
+			applyDBEnvDefaults(cfg.DBConfig)
+			return cmd.AddCert(context.Background(), cfg)
+		},
+	}
+
+	// Add-cert configuration flags
+	c.Flags().StringVar(&cfg.PEMFile, "pem-file", "", "Path to PEM file containing certificates (required)")
 	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
 
 	// Database connection flags
