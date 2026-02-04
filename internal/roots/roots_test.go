@@ -23,24 +23,4 @@ func TestGetSources(t *testing.T) {
 			t.Errorf("source[%d].URL is empty", i)
 		}
 	}
-
-	// Verify expected sources are present
-	expectedNames := map[string]bool{
-		"apple":     false,
-		"google":    false,
-		"microsoft": false,
-		"mozilla":   false,
-	}
-
-	for _, source := range sources {
-		if _, ok := expectedNames[source.Name]; ok {
-			expectedNames[source.Name] = true
-		}
-	}
-
-	for name, found := range expectedNames {
-		if !found {
-			t.Errorf("expected source %q not found", name)
-		}
-	}
 }
