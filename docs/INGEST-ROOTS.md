@@ -20,13 +20,16 @@ The `ingest-roots` command fetches and ingests root certificates (in PEM format)
 
 ### Root Sources
 
-Currently supported sources:
+The root sources are configured in an embedded `roots.yaml` file that is compiled into the binary. The following sources are currently included:
 
-| Source | Name | URL |
-|--------|------|-----|
-| Mozilla CCADB | `mozilla_ccadb` | Included Roots with Websites trust bit |
+| Source | Name | Description |
+|--------|------|-------------|
+| Apple | `apple` | Apple root CA bundle |
+| Google | `google` | Google root CA bundle |
+| Microsoft | `microsoft` | Microsoft root CA bundle |
+| Mozilla | `mozilla` | Mozilla root CA bundle |
 
-The command is designed to be extensible for additional root sources in the future (e.g., Microsoft, Apple, custom bundles).
+The root certificate bundles are sourced from the [tls-inspector/rootca](https://github.com/tls-inspector/rootca) repository which maintains up-to-date copies of the trust stores from major platforms.
 
 ### Certificate Processing
 
@@ -35,17 +38,14 @@ For each certificate in the PEM bundle:
 1. **Parse**: Decode PEM block and parse X.509 certificate
 2. **Compute hash**: SHA-256 of DER bytes
 3. **Insert**: Add to `certificates` table if not present
-4. **Associate**: Link to root source in `root_source_certs`
 
 ### Database Behavior
 
 **For new certificates:**
 - Inserted into `certificates` table with full details
-- Linked to the root source
 
 **For existing certificates:**
 - Skipped (no duplicate inserts)
-- Still associated with the root source (idempotent)
 
 Certificates are NOT associated with domains. This is expected as roots are trust anchors, not domain-specific.
 
@@ -78,14 +78,16 @@ The command logs per-source statistics:
 Example output:
 ```
 INFO starting ingest-roots job
-INFO fetching root certificates source=mozilla_ccadb
-INFO parsed certificates source=mozilla_ccadb count=147 parse_failures=0
-INFO root source ingested source=mozilla_ccadb parsed=147 inserted=147 already_exists=0 parse_failures=0
+INFO fetching root certificates source=apple url=https://raw.githubusercontent.com/...
+INFO parsed certificates source=apple count=150 parse_failures=0
+INFO root source ingested source=apple parsed=150 inserted=150 already_exists=0 parse_failures=0
+INFO fetching root certificates source=google url=https://raw.githubusercontent.com/...
+...
 ```
 
 On subsequent runs:
 ```
-INFO root source ingested source=mozilla_ccadb parsed=147 inserted=0 already_exists=147 parse_failures=0
+INFO root source ingested source=apple parsed=150 inserted=0 already_exists=150 parse_failures=0
 ```
 
 ## Idempotency
@@ -100,22 +102,24 @@ Running the ingest multiple times:
 | Table | Purpose |
 |-------|---------|
 | `certificates` | Stores the actual certificate data |
-| `root_sources` | Tracks named sources (e.g., mozilla_ccadb) |
-| `root_source_certs` | Links certificates to sources |
 
-## Extensibility
+## Configuration
 
-The implementation is structured to support additional root sources:
+The list of root sources is defined in `internal/roots/roots.yaml` and embedded into the binary at compile time. To add or modify root sources, update this file and rebuild the application.
 
-```go
-sources := []RootSource{
-    {Name: "mozilla_ccadb", URL: "..."},
-    {Name: "microsoft_roots", URL: "..."},  // Future
-    {Name: "custom_bundle", URL: "..."},    // Custom
-}
+Example configuration:
+
+```yaml
+sources:
+  - name: apple
+    url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/apple_ca_bundle.pem
+  - name: google
+    url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/google_ca_bundle.pem
+  - name: microsoft
+    url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/microsoft_ca_bundle.pem
+  - name: mozilla
+    url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/mozilla_ca_bundle.pem
 ```
-
-Each source can have a different URL and potentially different parsing logic (though currently only PEM bundle parsing is implemented).
 
 ## Exit Codes
 

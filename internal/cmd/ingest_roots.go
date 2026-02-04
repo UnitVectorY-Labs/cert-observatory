@@ -13,13 +13,7 @@ import (
 
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/certutil"
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/db"
-)
-
-const (
-	// MozillaCCADBURL is the URL for Mozilla's included roots PEM bundle.
-	MozillaCCADBURL = "https://ccadb.my.salesforce-sites.com/mozilla/IncludedRootsPEMTxt?TrustBitsInclude=Websites"
-	// MozillaSourceName is the name for the Mozilla CCADB root source (kept for logging purposes).
-	MozillaSourceName = "mozilla_ccadb"
+	"github.com/UnitVectorY-Labs/cert-observatory/internal/roots"
 )
 
 // RootSource represents a source for root certificates.
@@ -46,9 +40,7 @@ type IngestRootsConfig struct {
 func DefaultIngestRootsConfig() *IngestRootsConfig {
 	return &IngestRootsConfig{
 		Stderr: os.Stderr,
-		Sources: []RootSource{
-			{Name: MozillaSourceName, URL: MozillaCCADBURL},
-		},
+		// Sources will be loaded from embedded configuration in IngestRoots
 	}
 }
 
@@ -92,7 +84,15 @@ func IngestRoots(ctx context.Context, cfg *IngestRootsConfig) error {
 
 	sources := cfg.Sources
 	if len(sources) == 0 {
-		sources = DefaultIngestRootsConfig().Sources
+		// Load sources from embedded configuration
+		embeddedSources, err := roots.GetSources()
+		if err != nil {
+			logger.Error("failed to load root sources", "error", err)
+			return fmt.Errorf("load root sources: %w", err)
+		}
+		for _, s := range embeddedSources {
+			sources = append(sources, RootSource{Name: s.Name, URL: s.URL})
+		}
 	}
 
 	client := cfg.HTTPClient
