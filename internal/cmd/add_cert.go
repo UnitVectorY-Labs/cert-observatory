@@ -117,7 +117,7 @@ func AddCert(ctx context.Context, cfg *AddCertConfig) error {
 				)
 			}
 		} else {
-			inserted, err := repo.InsertRootCertificate(ctx, cert)
+			inserted, err := repo.InsertCertificate(ctx, cert)
 			if err != nil {
 				return fmt.Errorf("insert certificate: %w", err)
 			}

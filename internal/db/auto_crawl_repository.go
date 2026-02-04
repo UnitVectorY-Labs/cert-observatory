@@ -379,9 +379,10 @@ func (r *Repository) BulkUpsertDomainsFromToplist(ctx context.Context, domains [
 	return inserted, updated, nil
 }
 
-// InsertRootCertificate inserts a root certificate if it doesn't exist.
+// InsertCertificate inserts a certificate if it doesn't exist.
 // Returns true if inserted, false if already existed.
-func (r *Repository) InsertRootCertificate(ctx context.Context, certInfo *certutil.CertInfo) (bool, error) {
+// This can be used for any certificate type (root, intermediate, or end-entity).
+func (r *Repository) InsertCertificate(ctx context.Context, certInfo *certutil.CertInfo) (bool, error) {
 	// Try to insert, do nothing on conflict (upsert by hash)
 	result, err := r.db.ExecContext(ctx, `
 		INSERT INTO certificates (cert_hash, der, subject, issuer, not_before, not_after, ski, aki)

@@ -178,7 +178,7 @@ func ingestRootSource(
 				)
 			}
 		} else {
-			inserted, err := repo.InsertRootCertificate(ctx, cert)
+			inserted, err := repo.InsertCertificate(ctx, cert)
 			if err != nil {
 				return nil, fmt.Errorf("insert certificate: %w", err)
 			}
