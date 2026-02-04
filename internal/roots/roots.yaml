@@ -1,11 +1,13 @@
 # Root certificate sources for ingest-roots command
 # Each source has a name and URL pointing to a PEM bundle
 sources:
-  - name: apple
+  - name: apple-inspector
     url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/apple_ca_bundle.pem
-  - name: google
+  - name: google-inspector
     url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/google_ca_bundle.pem
-  - name: microsoft
+  - name: microsoft-inspector
     url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/microsoft_ca_bundle.pem
-  - name: mozilla
+  - name: mozilla-inspector
     url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/mozilla_ca_bundle.pem
+  - name: mozilla
+    url: https://ccadb.my.salesforce-sites.com/mozilla/IncludedRootsPEMTxt?TrustBitsInclude=Websites

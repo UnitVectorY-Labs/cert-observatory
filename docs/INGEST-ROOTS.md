@@ -107,20 +107,6 @@ Running the ingest multiple times:
 
 The list of root sources is defined in `internal/roots/roots.yaml` and embedded into the binary at compile time. To add or modify root sources, update this file and rebuild the application.
 
-Example configuration:
-
-```yaml
-sources:
-  - name: apple
-    url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/apple_ca_bundle.pem
-  - name: google
-    url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/google_ca_bundle.pem
-  - name: microsoft
-    url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/microsoft_ca_bundle.pem
-  - name: mozilla
-    url: https://raw.githubusercontent.com/tls-inspector/rootca/refs/heads/main/bundles/mozilla_ca_bundle.pem
-```
-
 ## Exit Codes
 
 | Code | Meaning |
