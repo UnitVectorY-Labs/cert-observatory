@@ -14,6 +14,7 @@ import (
 type mockRepository struct {
 	domainResult      *DomainResult
 	certificateResult *CertificateResult
+	skiCertificates   []*CertificateResult
 	canStandard       bool
 	standardWait      time.Duration
 	canForced         bool
@@ -34,6 +35,10 @@ func (m *mockRepository) GetCertificateByHash(ctx context.Context, hash []byte) 
 		return m.certificateResult, nil
 	}
 	return nil, context.DeadlineExceeded
+}
+
+func (m *mockRepository) FindCertificatesBySKI(ctx context.Context, ski []byte) ([]*CertificateResult, error) {
+	return m.skiCertificates, nil
 }
 
 func (m *mockRepository) CanStandardRefresh(ctx context.Context, domain string, window time.Duration) (bool, time.Duration, error) {

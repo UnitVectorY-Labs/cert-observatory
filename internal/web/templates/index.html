@@ -130,6 +130,38 @@
                 });
             }
         }
+
+        // Trust path graph: reveal the pre-rendered detail pane for the clicked node
+        function selectTrustPathCert(cardEl, certIdx) {
+            if (certIdx < 0) return; // missing cert – nothing to show
+
+            // Remove highlight from all cards in the graph
+            var allCards = document.querySelectorAll('.tp-card');
+            for (var i = 0; i < allCards.length; i++) {
+                allCards[i].classList.remove('tp-active');
+            }
+            cardEl.classList.add('tp-active');
+
+            // Hide every pre-rendered pane
+            var allPanes = document.querySelectorAll('.trust-path-cert-pane');
+            for (var j = 0; j < allPanes.length; j++) {
+                allPanes[j].style.display = 'none';
+            }
+
+            // Hide the placeholder text
+            var placeholder = document.getElementById('trust-path-detail');
+            if (placeholder) {
+                var ph = placeholder.querySelector('.trust-path-detail-placeholder');
+                if (ph) ph.style.display = 'none';
+            }
+
+            // Show the pane matching the index
+            var targetPane = document.getElementById('trust-cert-pane-' + certIdx);
+            if (targetPane) {
+                targetPane.style.display = 'block';
+                targetPane.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+            }
+        }
     </script>
 </body>
 </html>

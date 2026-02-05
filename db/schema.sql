@@ -94,6 +94,13 @@ CREATE INDEX IF NOT EXISTS idx_cert_not_after
 CREATE INDEX IF NOT EXISTS idx_cert_issuer
   ON certificates (issuer);
 
+-- Index for finding potential issuers by Subject Key Identifier (SKI)
+-- Used by the chain graph builder to locate certificates that may have
+-- signed a given child certificate (matching child.AKI = parent.SKI).
+CREATE INDEX IF NOT EXISTS idx_cert_ski
+  ON certificates (ski)
+  WHERE ski IS NOT NULL;
+
 
 ----------------------------
 -- Chains (exact peer-provided lists, deduplicated)

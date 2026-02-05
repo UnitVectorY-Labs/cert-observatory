@@ -291,3 +291,48 @@ func parseCertificateDER(der []byte) *x509.Certificate {
 	}
 	return info.Parsed
 }
+
+// FindCertificatesBySKI finds certificates whose SKI matches the given value.
+func (r *WebRepository) FindCertificatesBySKI(ctx context.Context, ski []byte) ([]*web.CertificateResult, error) {
+	if len(ski) == 0 {
+		return nil, nil
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT cert_hash, der, not_before, not_after, ski, aki
+		FROM certificates
+		WHERE ski = $1
+	`, ski)
+	if err != nil {
+		return nil, fmt.Errorf("query certificates by ski: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*web.CertificateResult
+	for rows.Next() {
+		cert := &web.CertificateResult{}
+		var der []byte
+		var certSKI, certAKI []byte
+		var notBefore, notAfter sql.NullTime
+
+		if err := rows.Scan(&cert.CertHash, &der, &notBefore, &notAfter, &certSKI, &certAKI); err != nil {
+			return nil, fmt.Errorf("scan certificate: %w", err)
+		}
+
+		cert.PEM = certutil.DERToPEM(der)
+		cert.DER = der
+		if notBefore.Valid {
+			cert.NotBefore = notBefore.Time
+		}
+		if notAfter.Valid {
+			cert.NotAfter = notAfter.Time
+		}
+		cert.SKI = certSKI
+		cert.AKI = certAKI
+		cert.Parsed = parseCertificateDER(der)
+
+		results = append(results, cert)
+	}
+
+	return results, rows.Err()
+}
