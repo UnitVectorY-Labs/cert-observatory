@@ -305,6 +305,9 @@ func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, res
 
 	data := buildResultsViewData(result, true, canForce, waitTime, lastCrawlFailed)
 
+	// Build the chain graph from the chain certificates
+	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain)
+
 	s.renderResults(w, r, data)
 }
 
@@ -326,6 +329,9 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
 
 	data := buildResultsViewData(domainResult, false, canForce, waitTime, false)
+
+	// Build the chain graph from the chain certificates
+	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain)
 
 	s.renderResults(w, r, data)
 }

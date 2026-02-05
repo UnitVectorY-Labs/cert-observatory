@@ -67,6 +67,9 @@ type Repository interface {
 	GetDomainWithChain(ctx context.Context, domain string) (*DomainResult, error)
 	// GetCertificateByHash retrieves a certificate by its hash.
 	GetCertificateByHash(ctx context.Context, hash []byte) (*CertificateResult, error)
+	// FindCertificatesBySKI finds certificates whose SKI matches the given value.
+	// Used for building the certificate trust path graph.
+	FindCertificatesBySKI(ctx context.Context, ski []byte) ([]*CertificateResult, error)
 	// CanStandardRefresh checks if a standard refresh is allowed for the domain.
 	CanStandardRefresh(ctx context.Context, domain string, window time.Duration) (bool, time.Duration, error)
 	// CanForcedRefresh checks if a forced refresh is allowed for the domain.

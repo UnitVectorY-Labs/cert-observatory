@@ -654,3 +654,251 @@ footer a:hover {
     display: none;
   }
 }
+
+/* =============================================
+   Trust Path Graph
+   ============================================= */
+
+.trust-path-section {
+  margin-top: 2rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.trust-path-header h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.trust-path-description {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.trust-path-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.legend-swatch-chain {
+  background: rgba(249, 115, 22, 0.25);
+  border: 2px solid var(--accent);
+}
+
+.legend-swatch-selfsigned {
+  background: rgba(34, 197, 94, 0.2);
+  border: 2px solid var(--success);
+}
+
+.legend-swatch-discovered {
+  background: rgba(96, 165, 250, 0.2);
+  border: 2px solid #60a5fa;
+}
+
+.legend-swatch-missing {
+  background: rgba(239, 68, 68, 0.15);
+  border: 2px dashed var(--error);
+}
+
+/* Graph container */
+.trust-path-graph {
+  overflow-x: auto;
+  padding: 0.75rem 0;
+}
+
+/* Node wrapper – centers card and holds children below */
+.tp-node-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+/* Clickable certificate card */
+.tp-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  max-width: 220px;
+  min-width: 120px;
+  word-break: break-word;
+  transition: box-shadow 0.15s, transform 0.15s;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-light);
+}
+
+.tp-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.tp-card.tp-active {
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+.tp-card-inchain {
+  border-color: var(--accent);
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.tp-card-selfsigned {
+  border-color: var(--success);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.tp-card-discovered {
+  border-color: #60a5fa;
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.tp-card-missing {
+  border: 2px dashed var(--error);
+  background: rgba(239, 68, 68, 0.06);
+  cursor: default;
+}
+
+.tp-card-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.tp-card-badge {
+  font-size: 0.65rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tp-badge-chain {
+  background: rgba(249, 115, 22, 0.2);
+  color: var(--accent);
+}
+
+.tp-badge-root {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--success);
+}
+
+.tp-badge-missing {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--error);
+}
+
+/* Vertical connector: parent card → horizontal rail */
+.tp-connector-down {
+  width: 2px;
+  height: 18px;
+  background: var(--border-light);
+}
+
+/* Vertical connector: horizontal rail → child card */
+.tp-connector-up {
+  width: 2px;
+  height: 18px;
+  background: var(--border-light);
+  margin: 0 auto;
+}
+
+/* Horizontal row of children with a rail connecting them */
+.tp-children-row {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  position: relative;
+}
+
+/* The horizontal rail spans from first child center to last child center */
+.tp-children-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  height: 2px;
+  background: var(--border-light);
+  /* spans between center of first and center of last child */
+  left: calc(50% / var(--tp-child-count, 1));
+  right: calc(50% / var(--tp-child-count, 1));
+}
+
+/* When only one child, hide the horizontal rail */
+.tp-children-row:has(> .tp-branch:only-child)::before {
+  display: none;
+}
+
+.tp-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Detail pane below the graph */
+.trust-path-detail {
+  margin-top: 1rem;
+  min-height: 2rem;
+}
+
+.trust-path-detail-placeholder {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 1rem 0;
+  margin: 0;
+}
+
+.trust-path-cert-pane {
+  animation: fadeIn 0.2s ease-in;
+}
+
+/* Responsive: on narrow screens stack children vertically */
+@media (max-width: 600px) {
+  .tp-children-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .tp-children-row::before {
+    display: none;
+  }
+  .tp-branch {
+    padding: 0;
+  }
+  .tp-card {
+    max-width: 180px;
+    min-width: 100px;
+    padding: 0.4rem 0.6rem;
+  }
+  .tp-card-label {
+    font-size: 0.75rem;
+  }
+}

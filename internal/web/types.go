@@ -91,6 +91,8 @@ type ResultsViewData struct {
 	RefreshAvailableIn string
 	LastCrawlFailed    bool
 	Chain              []*CertViewData
+	// ChainGraph is the certificate trust path graph for the chain visualization section.
+	ChainGraph *ChainGraphData
 }
 
 // certToViewData converts a CertificateResult to CertViewData.
