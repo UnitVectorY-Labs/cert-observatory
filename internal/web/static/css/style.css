@@ -78,6 +78,7 @@ header p {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1.25rem;
+  min-width: 0;
 }
 
 .input-panel h2 {
@@ -91,6 +92,7 @@ header p {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1.25rem;
+  min-width: 0;
 }
 
 .info-panel h3 {
@@ -618,5 +620,37 @@ footer a:hover {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 800px) {
+  .input-section {
+    grid-template-columns: 1fr;
+  }
+  .pem-block {
+    max-height: 200px;
+  }
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 1rem;
+  }
+  footer {
+    padding: 1rem;
+  }
+  .input-panel, .info-panel {
+    padding: 0.875rem;
+  }
+  .btn-primary {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.85rem;
+  }
+  .search-form {
+    gap: 0.5rem;
+  }
+  .btn-text-mobile-hidden {
+    display: none;
   }
 }
