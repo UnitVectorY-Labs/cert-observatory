@@ -650,4 +650,7 @@ footer a:hover {
   .search-form {
     gap: 0.5rem;
   }
+  .btn-text-mobile-hidden {
+    display: none;
+  }
 }
