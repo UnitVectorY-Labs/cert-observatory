@@ -17,7 +17,8 @@
             <input type="hidden" name="domain" value="{{.Domain}}">
             <button type="submit" class="btn btn-secondary btn-sm">
                 <span class="htmx-indicator spinner"></span>
-                Force Refresh
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-refresh"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+                Refresh
             </button>
         </form>
         {{end}}
@@ -27,13 +28,20 @@
         {{range $index, $cert := .Chain}}
         <div class="cert-row">
             <div class="cert-row-header">
-                <span class="cert-position">{{$cert.CertLabel}}</span>
+                <span class="cert-position"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-certificate"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>{{$cert.CertLabel}}</span>
             </div>
             <div class="cert-row-content">
                 <div class="pem-panel">
                     <div class="pem-container">
                         <pre class="pem-block" id="pem-{{$cert.HashHex}}">{{$cert.PEM}}</pre>
-                        <button type="button" class="btn-copy" onclick="copyPEM(this, '{{$cert.HashHex}}')">Copy PEM</button>
+                        <button type="button" class="btn-copy" onclick="copyPEM(this, '{{$cert.HashHex}}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+                                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                <path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" />
+                                <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+                            </svg>
+                            Copy PEM
+                        </button>
                     </div>
                 </div>
                 <div class="details-panel">
