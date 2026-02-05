@@ -11,15 +11,15 @@
     <header>
         <div class="container">
             <h1>🔐 Cert Observatory</h1>
-            <p>Retrieve and inspect TLS certificate chains for any domain. The retrieval is done server-side, so results may differ from your local view if a different certificate is served or there is a man-in-the-middle.</p>
+            <p>Retrieve and inspect TLS certificate chains for any domain.</p>
         </div>
     </header>
 
     <main class="container">
         <div class="input-section">
             <div class="input-panel">
-                <h2>Retrieve Certificate Chain</h2>
-                <form id="inspect-form" class="search-form" method="POST" action="/inspect" hx-post="/inspect" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
+                <h2><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-world-download" style="vertical-align: middle; margin-right: 0.5rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M21 12a9 9 0 1 0 -9 9" /><path d="M3.6 9h16.8" /><path d="M3.6 15h8.4" /><path d="M11.578 3a17 17 0 0 0 0 18" /><path d="M12.5 3c1.719 2.755 2.5 5.876 2.5 9" /><path d="M18 14v7m-3 -3l3 3l3 -3" /></svg>Retrieve Certificate</h2>
+                <form id="inspect-form" class="search-form" method="POST" action="/inspect" hx-post="/inspect" hx-target="#results" hx-indicator="#loading">
                     <input 
                         type="text" 
                         name="domain" 
@@ -34,18 +34,30 @@
                     >
                     <button type="submit" class="btn btn-primary">
                         <span class="htmx-indicator spinner"></span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-download"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
                         Retrieve
                     </button>
                 </form>
             </div>
             <div class="info-panel">
-                <h3>What this tool does</h3>
-                <ul>
-                    <li><strong>Server-side retrieval</strong> of the TLS certificate chain presented by the server</li>
-                    <li><strong>Full chain displayed</strong> with each certificate decoded for inspection</li>
-                    <li><strong>Inspection only</strong> – chain trust is not validated</li>
-                    <li>TLS handshake on port 443; no HTTP requests, no redirects</li>
-                </ul>
+            <h3>What this tool does</h3>
+            <ul>
+                <li>
+                    <!-- Tabler: server-2 -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-server-2"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-2" /><path d="M3 15a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3l0 -2" /><path d="M7 8l0 .01" /><path d="M7 16l0 .01" /><path d="M11 8h6" /><path d="M11 16h6" /></svg>
+                    <span><strong>Server-side retrieval</strong> of the TLS certificate chain</span>
+                </li>
+                <li>
+                    <!-- Tabler: certificate -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-certificate"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>
+                    <span><strong>Full chain displayed</strong> with each certificate decoded for inspection</span>
+                </li>
+                <li>
+                    <!-- Tabler: shield-lock -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-shield-lock"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><path d="M11 11a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" /><path d="M12 12l0 2.5" /></svg>
+                    <span><strong>Basic TLS handshake</strong> on port 443; no HTTP requests, no redirects followed</span>
+                </li>
+            </ul>
             </div>
         </div>
 
@@ -63,9 +75,8 @@
             {{template "results" .Results}}
             {{else}}
             <div class="empty-state">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                </svg>
+                <!-- Tabler: shield-check -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="icon icon-tabler icons-tabler-filled icon-tabler-shield-check"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11.998 2l.118 .007l.059 .008l.061 .013l.111 .034a.993 .993 0 0 1 .217 .112l.104 .082l.255 .218a11 11 0 0 0 7.189 2.537l.342 -.01a1 1 0 0 1 1.005 .717a13 13 0 0 1 -9.208 16.25a1 1 0 0 1 -.502 0a13 13 0 0 1 -9.209 -16.25a1 1 0 0 1 1.005 -.717a11 11 0 0 0 7.531 -2.527l.263 -.225l.096 -.075a.993 .993 0 0 1 .217 -.112l.112 -.034a.97 .97 0 0 1 .119 -.021l.115 -.007zm3.71 7.293a1 1 0 0 0 -1.415 0l-3.293 3.292l-1.293 -1.292l-.094 -.083a1 1 0 0 0 -1.32 1.497l2 2l.094 .083a1 1 0 0 0 1.32 -.083l4 -4l.083 -.094a1 1 0 0 0 -.083 -1.32z" /></svg>
                 <p>Enter a domain above to retrieve its TLS certificate chain</p>
             </div>
             {{end}}
@@ -80,6 +91,11 @@
         </p>
     </footer>
 
+    <script>
+        window.htmx = window.htmx || {};
+        window.htmx.config = window.htmx.config || {};
+        window.htmx.config.allowEval = false;
+    </script>
     <script src="/static/js/htmx.min.js"></script>
     <script>
         // Configure HTMX to swap content on error responses (4xx, 5xx)
@@ -91,25 +107,28 @@
             }
         });
 
+        // Clear results before a request is sent (only for this form)
+        document.addEventListener('htmx:beforeRequest', function (evt) {
+            if (evt.target && evt.target.id === 'inspect-form') {
+                const results = document.getElementById('results');
+                if (results) results.innerHTML = '';
+            }
+        });
+
         // Copy PEM to clipboard
         function copyPEM(button, certHash) {
             const pemBlock = document.getElementById('pem-' + certHash);
             if (pemBlock) {
                 navigator.clipboard.writeText(pemBlock.textContent).then(() => {
-                    const originalText = button.textContent;
+                    const originalHTML = button.innerHTML;
                     button.textContent = 'Copied!';
                     button.classList.add('copied');
                     setTimeout(() => { 
-                        button.textContent = originalText; 
+                        button.innerHTML = originalHTML; 
                         button.classList.remove('copied');
                     }, 1500);
                 });
             }
-        }
-
-        // Clear results before new request
-        function clearResults() {
-            document.getElementById('results').innerHTML = '';
         }
     </script>
 </body>
