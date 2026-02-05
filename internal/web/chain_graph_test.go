@@ -353,7 +353,9 @@ func TestBuildChainGraph_CrossSigning(t *testing.T) {
 		t.Fatalf("generate inter key: %v", err)
 	}
 	interSKI := make([]byte, 20)
-	rand.Read(interSKI)
+	if _, err := rand.Read(interSKI); err != nil {
+		t.Fatalf("generate inter SKI: %v", err)
+	}
 
 	// Sign by root A
 	interTmplA := &x509.Certificate{
