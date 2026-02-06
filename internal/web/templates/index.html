@@ -40,7 +40,7 @@
                 </form>
             </div>
             <div class="info-panel">
-            <h3>What this tool does</h3>
+            <h3>Observation details:</h3>
             <ul>
                 <li>
                     <!-- Tabler: server-2 -->
@@ -48,14 +48,19 @@
                     <span><strong>Server-side retrieval</strong> of the TLS certificate chain</span>
                 </li>
                 <li>
+                    <!-- Tabler: shield-lock -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-shield-lock"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><path d="M11 11a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" /><path d="M12 12l0 2.5" /></svg>
+                    <span><strong>Basic TLS handshake</strong> on port 443; no HTTP requests, no redirects followed</span>
+                </li>
+                <li>
                     <!-- Tabler: certificate -->
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-certificate"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>
                     <span><strong>Full chain displayed</strong> with each certificate decoded for inspection</span>
                 </li>
                 <li>
-                    <!-- Tabler: shield-lock -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-shield-lock"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><path d="M11 11a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" /><path d="M12 12l0 2.5" /></svg>
-                    <span><strong>Basic TLS handshake</strong> on port 443; no HTTP requests, no redirects followed</span>
+                    <!-- Tabler: map -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-map"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>
+                    <span><strong>Trust path expanded</strong> to include CAs beyond the server-presented chain</span>
                 </li>
             </ul>
             </div>
@@ -97,7 +102,18 @@
         window.htmx.config.allowEval = false;
     </script>
     <script src="/static/js/htmx.min.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.min.js"
+      integrity="sha384-1ggI9FC3CkghppRD/XCR4aD+jp4DxwXlJIW0wxhyTLNKuiZEW3c4BwcjKXl0iVAJ"
+      crossorigin="anonymous"></script>
     <script>
+        if (window.mermaid) {
+            mermaid.initialize({
+                startOnLoad: false,
+                securityLevel: 'loose'
+            });
+        }
+
         // Configure HTMX to swap content on error responses (4xx, 5xx)
         document.body.addEventListener('htmx:beforeSwap', function(evt) {
             // Allow swapping for 4xx and 5xx responses so error messages display
@@ -115,6 +131,25 @@
             }
         });
 
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            renderTrustPathMermaid(evt.target);
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            renderTrustPathMermaid(document);
+        });
+
+        // Render Mermaid diagrams in the given scope (document or swapped fragment).
+        function renderTrustPathMermaid(scope) {
+            if (!window.mermaid) return;
+            const root = scope || document;
+            const diagrams = root.querySelectorAll ? root.querySelectorAll('.trust-path-mermaid .mermaid') : [];
+            if (!diagrams.length) return;
+            mermaid.run({ nodes: Array.from(diagrams) }).catch(function(err) {
+                console.error('failed to render mermaid trust-path diagram', err);
+            });
+        }
+
         // Copy PEM to clipboard
         function copyPEM(button, certHash) {
             const pemBlock = document.getElementById('pem-' + certHash);
@@ -131,16 +166,33 @@
             }
         }
 
+        // Mermaid click callback: maps Mermaid node IDs to certificate indices.
+        function selectTrustPathCertFromMermaid(nodeId) {
+            const mapEntries = document.querySelectorAll('.tp-node-map');
+            let certIdx = -1;
+            for (let i = 0; i < mapEntries.length; i++) {
+                if (mapEntries[i].dataset.nodeId === nodeId) {
+                    certIdx = parseInt(mapEntries[i].dataset.certIdx, 10);
+                    break;
+                }
+            }
+
+            const activeNode = document.getElementById(nodeId);
+            selectTrustPathCert(activeNode, certIdx);
+        }
+
         // Trust path graph: reveal the pre-rendered detail pane for the clicked node
-        function selectTrustPathCert(cardEl, certIdx) {
+        function selectTrustPathCert(activeNodeEl, certIdx) {
             if (certIdx < 0) return; // missing cert – nothing to show
 
-            // Remove highlight from all cards in the graph
-            var allCards = document.querySelectorAll('.tp-card');
-            for (var i = 0; i < allCards.length; i++) {
-                allCards[i].classList.remove('tp-active');
+            // Remove highlight from all graph nodes
+            var allNodes = document.querySelectorAll('.trust-path-mermaid .node');
+            for (var i = 0; i < allNodes.length; i++) {
+                allNodes[i].classList.remove('tp-active');
             }
-            cardEl.classList.add('tp-active');
+            if (activeNodeEl) {
+                activeNodeEl.classList.add('tp-active');
+            }
 
             // Hide every pre-rendered pane
             var allPanes = document.querySelectorAll('.trust-path-cert-pane');

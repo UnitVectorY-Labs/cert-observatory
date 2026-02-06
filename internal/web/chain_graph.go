@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"strings"
 )
 
 // maxGraphDepth limits the depth of the chain graph to prevent infinite recursion.
@@ -36,16 +38,29 @@ type ChainGraphData struct {
 	Root *ChainGraphNode
 	// AllCerts contains all unique certificates for detail display below the graph.
 	AllCerts []*CertViewData
+	// MermaidDiagram is the flowchart source rendered by Mermaid.
+	MermaidDiagram string
+	// MermaidNodeToCertIndex maps Mermaid node IDs to AllCerts indices.
+	MermaidNodeToCertIndex map[string]int
+	// Legend controls which dynamic legend items are displayed.
+	Legend ChainGraphLegend
+}
+
+// ChainGraphLegend indicates which node-type legend items are present in the graph.
+type ChainGraphLegend struct {
+	HasServerCertificate bool
+	HasIntermediateCA    bool
+	HasRootCA            bool
+	HasMissing           bool
 }
 
 // chainGraphBuilder builds the certificate trust path graph.
 type chainGraphBuilder struct {
-	repo       Repository
-	ctx        context.Context
-	chainSet   map[string]bool            // hashes of certs in the TLS chain
-	certCache  map[string]*CertificateResult // hash -> cert, avoids re-fetching
-	allCerts   []*CertViewData            // accumulated unique certs for detail display
-	certIndex  map[string]int             // hash -> index in allCerts
+	repo      Repository
+	ctx       context.Context
+	chainSet  map[string]bool // hashes of certs in the TLS chain
+	allCerts  []*CertViewData // accumulated unique certs for detail display
+	certIndex map[string]int  // hash -> index in allCerts
 }
 
 // buildChainGraph constructs the certificate trust path tree for display.
@@ -60,16 +75,14 @@ func buildChainGraph(ctx context.Context, repo Repository, chainCerts []*Certifi
 		repo:      repo,
 		ctx:       ctx,
 		chainSet:  make(map[string]bool),
-		certCache: make(map[string]*CertificateResult),
 		allCerts:  nil,
 		certIndex: make(map[string]int),
 	}
 
-	// Populate chain set and cert cache from the provided chain
+	// Populate chain set from the provided chain
 	for _, cert := range chainCerts {
 		hashHex := hex.EncodeToString(cert.CertHash)
 		builder.chainSet[hashHex] = true
-		builder.certCache[hashHex] = cert
 	}
 
 	// Build the tree starting from the leaf
@@ -79,10 +92,188 @@ func buildChainGraph(ctx context.Context, repo Repository, chainCerts []*Certifi
 		return nil
 	}
 
+	diagram, nodeToCertIdx, legend := buildMermaidDiagram(root)
+
 	return &ChainGraphData{
-		Root:     root,
-		AllCerts: builder.allCerts,
+		Root:                   root,
+		AllCerts:               builder.allCerts,
+		MermaidDiagram:         diagram,
+		MermaidNodeToCertIndex: nodeToCertIdx,
+		Legend:                 legend,
 	}
+}
+
+// mermaidGraphBuilder converts ChainGraphNode trees into Mermaid flowchart syntax.
+type mermaidGraphBuilder struct {
+	nextNodeID      int
+	nextMissingID   int
+	leafHash        string
+	nodeIDByHash    map[string]string
+	nodeToCertIndex map[string]int
+	inChainNodeSet  map[string]bool
+	inChainNodeIDs  []string
+	classMembers    map[string][]string
+	edges           map[string]bool
+	lines           []string
+}
+
+func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGraphLegend) {
+	if root == nil {
+		return "", nil, ChainGraphLegend{}
+	}
+
+	b := &mermaidGraphBuilder{
+		leafHash:        root.HashHex,
+		nodeIDByHash:    make(map[string]string),
+		nodeToCertIndex: make(map[string]int),
+		inChainNodeSet:  make(map[string]bool),
+		classMembers:    make(map[string][]string),
+		edges:           make(map[string]bool),
+		lines:           []string{"flowchart TB"},
+	}
+
+	b.walk(root)
+
+	if len(b.inChainNodeIDs) > 0 {
+		b.lines = append(b.lines,
+			`subgraph tlsChain[" "]`,
+			"direction TB",
+		)
+		for _, nodeID := range b.inChainNodeIDs {
+			b.lines = append(b.lines, nodeID)
+		}
+		b.lines = append(b.lines,
+			"end",
+			"style tlsChain fill:#0f172a,stroke:#64748b,stroke-width:1px,stroke-dasharray:4 3;",
+		)
+	}
+
+	for _, className := range []string{"leaf", "intermediate", "root", "missing", "interactive"} {
+		ids, ok := b.classMembers[className]
+		if !ok || len(ids) == 0 {
+			continue
+		}
+		b.lines = append(b.lines, fmt.Sprintf("class %s %s;", strings.Join(ids, ","), className))
+	}
+
+	b.lines = append(b.lines,
+		"classDef leaf fill:#3d2a12,stroke:#f97316,stroke-width:2px,color:#f8fafc;",
+		"classDef intermediate fill:#102a47,stroke:#60a5fa,stroke-width:2px,color:#f8fafc;",
+		"classDef root fill:#123524,stroke:#22c55e,stroke-width:2px,color:#f8fafc;",
+		"classDef missing fill:#3b1212,stroke:#ef4444,stroke-width:2px,stroke-dasharray:5 3,color:#f8fafc;",
+		"classDef interactive cursor:pointer;",
+	)
+
+	legend := ChainGraphLegend{
+		HasServerCertificate: len(b.classMembers["leaf"]) > 0,
+		HasIntermediateCA:    len(b.classMembers["intermediate"]) > 0,
+		HasRootCA:            len(b.classMembers["root"]) > 0,
+		HasMissing:           len(b.classMembers["missing"]) > 0,
+	}
+
+	return strings.Join(b.lines, "\n"), b.nodeToCertIndex, legend
+}
+
+func (b *mermaidGraphBuilder) addClassMember(className, nodeID string) {
+	b.classMembers[className] = append(b.classMembers[className], nodeID)
+}
+
+func (b *mermaidGraphBuilder) addInChainNode(nodeID string) {
+	if b.inChainNodeSet[nodeID] {
+		return
+	}
+	b.inChainNodeSet[nodeID] = true
+	b.inChainNodeIDs = append(b.inChainNodeIDs, nodeID)
+}
+
+func (b *mermaidGraphBuilder) classifyNode(node *ChainGraphNode) string {
+	switch {
+	case node.IsMissing:
+		return "missing"
+	case node.HashHex == b.leafHash:
+		return "leaf"
+	case node.IsSelfSigned:
+		return "root"
+	default:
+		return "intermediate"
+	}
+}
+
+func (b *mermaidGraphBuilder) walk(node *ChainGraphNode) string {
+	if node == nil {
+		return ""
+	}
+
+	nodeID := b.ensureNode(node)
+	for _, issuer := range node.Issuers {
+		childID := b.walk(issuer)
+		if childID == "" {
+			continue
+		}
+		edgeKey := nodeID + "->" + childID
+		if b.edges[edgeKey] {
+			continue
+		}
+		b.edges[edgeKey] = true
+		b.lines = append(b.lines, fmt.Sprintf("%s --> %s", nodeID, childID))
+	}
+
+	return nodeID
+}
+
+func (b *mermaidGraphBuilder) ensureNode(node *ChainGraphNode) string {
+	if node == nil {
+		return ""
+	}
+
+	if !node.IsMissing && node.HashHex != "" {
+		if existingID, ok := b.nodeIDByHash[node.HashHex]; ok {
+			return existingID
+		}
+	}
+
+	var nodeID string
+	if node.IsMissing {
+		nodeID = fmt.Sprintf("m%d", b.nextMissingID)
+		b.nextMissingID++
+	} else {
+		nodeID = fmt.Sprintf("n%d", b.nextNodeID)
+		b.nextNodeID++
+		b.nodeIDByHash[node.HashHex] = nodeID
+	}
+
+	label := node.SubjectCN
+	if label == "" {
+		label = node.SubjectDN
+	}
+	if label == "" {
+		label = "(unknown subject)"
+	}
+	label = escapeMermaidLabel(label)
+	b.lines = append(b.lines, fmt.Sprintf("%s[\"%s\"]", nodeID, label))
+
+	className := b.classifyNode(node)
+	b.addClassMember(className, nodeID)
+	if node.InChain {
+		b.addInChainNode(nodeID)
+	}
+
+	if node.CertIndex >= 0 {
+		b.nodeToCertIndex[nodeID] = node.CertIndex
+		b.addClassMember("interactive", nodeID)
+		b.lines = append(b.lines, fmt.Sprintf("click %s selectTrustPathCertFromMermaid \"View certificate details\"", nodeID))
+	}
+
+	return nodeID
+}
+
+func escapeMermaidLabel(label string) string {
+	replacer := strings.NewReplacer(
+		"\\", "\\\\",
+		`"`, `\"`,
+		"\n", " ",
+	)
+	return replacer.Replace(label)
 }
 
 // buildNode recursively builds a ChainGraphNode for a certificate.
@@ -174,8 +365,6 @@ func (b *chainGraphBuilder) findValidIssuers(cert *CertificateResult) []*Certifi
 				cert.Parsed.RawTBSCertificate,
 				cert.Parsed.Signature,
 			); err == nil {
-				hashHex := hex.EncodeToString(candidate.CertHash)
-				b.certCache[hashHex] = candidate
 				valid = append(valid, candidate)
 			}
 		}

@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 )
@@ -268,11 +269,64 @@ func TestBuildChainGraph_SimpleChain(t *testing.T) {
 	if len(graph.AllCerts) != 3 {
 		t.Errorf("expected 3 allCerts, got %d", len(graph.AllCerts))
 	}
+	if !graph.Legend.HasServerCertificate {
+		t.Error("expected server certificate legend item")
+	}
+	if !graph.Legend.HasIntermediateCA {
+		t.Error("expected intermediate CA legend item")
+	}
+	if !graph.Legend.HasRootCA {
+		t.Error("expected root CA legend item")
+	}
+	if graph.Legend.HasMissing {
+		t.Error("did not expect missing legend item")
+	}
 }
 
-func TestBuildChainGraph_DiscoveredRoot(t *testing.T) {
-	// Scenario: chain has only [leaf, intermediate], root is discovered from DB
-	root := generateSelfSignedRoot(t, "Discovered Root CA")
+func TestBuildChainGraph_MermaidStylingAndGrouping(t *testing.T) {
+	root := generateSelfSignedRoot(t, "Color Root CA")
+	inter := generateSignedIntermediate(t, "Color Intermediate CA", root)
+	leaf := generateLeafCert(t, "color.example.com", inter)
+
+	repo := newSKILookupRepo()
+	repo.registerCert(root)
+	repo.registerCert(inter)
+
+	// Only leaf and intermediate are in the presented TLS chain.
+	chainCerts := []*CertificateResult{leaf.result, inter.result}
+
+	graph := buildChainGraph(context.Background(), repo, chainCerts)
+	if graph == nil {
+		t.Fatal("expected non-nil graph")
+	}
+
+	diagram := graph.MermaidDiagram
+	if !strings.Contains(diagram, `subgraph tlsChain[" "]`) {
+		t.Error("expected mermaid diagram to include tlsChain subgraph")
+	}
+	if !strings.Contains(diagram, "style tlsChain ") {
+		t.Error("expected mermaid diagram to style tlsChain subgraph")
+	}
+	if !strings.Contains(diagram, "classDef leaf ") {
+		t.Error("expected leaf class definition")
+	}
+	if !strings.Contains(diagram, "classDef intermediate ") {
+		t.Error("expected intermediate class definition")
+	}
+	if !strings.Contains(diagram, "classDef root ") {
+		t.Error("expected root class definition")
+	}
+	if !strings.Contains(diagram, "classDef missing ") {
+		t.Error("expected missing class definition")
+	}
+	if strings.Contains(diagram, "classDef discovered ") {
+		t.Error("did not expect discovered class definition")
+	}
+}
+
+func TestBuildChainGraph_OutOfChainRoot(t *testing.T) {
+	// Scenario: chain has only [leaf, intermediate], root is fetched from DB.
+	root := generateSelfSignedRoot(t, "Out-Of-Chain Root CA")
 	inter := generateSignedIntermediate(t, "Inter CA", root)
 	leaf := generateLeafCert(t, "app.example.com", inter)
 
@@ -302,13 +356,13 @@ func TestBuildChainGraph_DiscoveredRoot(t *testing.T) {
 	}
 	rootNode := interNode.Issuers[0]
 	if rootNode.InChain {
-		t.Error("discovered root should NOT be InChain")
+		t.Error("out-of-chain root should NOT be InChain")
 	}
 	if !rootNode.IsSelfSigned {
-		t.Error("discovered root should be self-signed")
+		t.Error("out-of-chain root should be self-signed")
 	}
-	if rootNode.SubjectCN != "Discovered Root CA" {
-		t.Errorf("expected root CN 'Discovered Root CA', got %q", rootNode.SubjectCN)
+	if rootNode.SubjectCN != "Out-Of-Chain Root CA" {
+		t.Errorf("expected root CN 'Out-Of-Chain Root CA', got %q", rootNode.SubjectCN)
 	}
 }
 
@@ -339,6 +393,12 @@ func TestBuildChainGraph_MissingIssuer(t *testing.T) {
 	}
 	if missingNode.CertIndex != -1 {
 		t.Errorf("expected CertIndex -1 for missing node, got %d", missingNode.CertIndex)
+	}
+	if !graph.Legend.HasMissing {
+		t.Error("expected missing legend item")
+	}
+	if graph.Legend.HasRootCA {
+		t.Error("did not expect root CA legend item when issuer is missing")
 	}
 }
 
