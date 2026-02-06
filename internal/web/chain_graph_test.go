@@ -281,6 +281,9 @@ func TestBuildChainGraph_SimpleChain(t *testing.T) {
 	if graph.Legend.HasMissing {
 		t.Error("did not expect missing legend item")
 	}
+	if graph.Legend.HasExpired {
+		t.Error("did not expect expired legend item")
+	}
 }
 
 func TestBuildChainGraph_MermaidStylingAndGrouping(t *testing.T) {
@@ -399,6 +402,36 @@ func TestBuildChainGraph_MissingIssuer(t *testing.T) {
 	}
 	if graph.Legend.HasRootCA {
 		t.Error("did not expect root CA legend item when issuer is missing")
+	}
+}
+
+func TestBuildChainGraph_ExpiredCertLegendAndLabel(t *testing.T) {
+	root := generateSelfSignedRoot(t, "Expired Root CA")
+	inter := generateSignedIntermediate(t, "Expired Intermediate CA", root)
+	leaf := generateLeafCert(t, "expired.example.com", inter)
+
+	expiredAt := time.Now().Add(-1 * time.Hour)
+	leaf.cert.NotAfter = expiredAt
+	leaf.result.Parsed.NotAfter = expiredAt
+	leaf.result.NotAfter = expiredAt
+
+	repo := newSKILookupRepo()
+	repo.registerCert(root)
+	repo.registerCert(inter)
+
+	chainCerts := []*CertificateResult{leaf.result, inter.result, root.result}
+
+	graph := buildChainGraph(context.Background(), repo, chainCerts)
+	if graph == nil {
+		t.Fatal("expected non-nil graph")
+	}
+
+	if !graph.Legend.HasExpired {
+		t.Fatal("expected expired legend item to be enabled")
+	}
+
+	if !strings.Contains(graph.MermaidDiagram, "⛔ expired.example.com") {
+		t.Fatalf("expected mermaid diagram to contain expired label prefix, diagram=%q", graph.MermaidDiagram)
 	}
 }
 
