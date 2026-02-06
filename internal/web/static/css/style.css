@@ -788,6 +788,29 @@ footer a:hover {
   margin: 0;
 }
 
+/* Chain view section heading */
+.chain-view-header {
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+.chain-view-heading {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.chain-view-description {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Selected certificate heading inside trust path section */
+#selected-cert-heading {
+  margin-top: 1rem;
+}
+
 .trust-path-cert-pane {
   animation: fadeIn 0.2s ease-in;
 }

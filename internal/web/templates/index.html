@@ -194,17 +194,18 @@
                 activeNodeEl.classList.add('tp-active');
             }
 
+            // Hide the downloaded chain section
+            var chainSection = document.getElementById('chain-view-section');
+            if (chainSection) chainSection.style.display = 'none';
+
+            // Show the selected certificate heading
+            var selectedHeading = document.getElementById('selected-cert-heading');
+            if (selectedHeading) selectedHeading.style.display = 'block';
+
             // Hide every pre-rendered pane
             var allPanes = document.querySelectorAll('.trust-path-cert-pane');
             for (var j = 0; j < allPanes.length; j++) {
                 allPanes[j].style.display = 'none';
-            }
-
-            // Hide the placeholder text
-            var placeholder = document.getElementById('trust-path-detail');
-            if (placeholder) {
-                var ph = placeholder.querySelector('.trust-path-detail-placeholder');
-                if (ph) ph.style.display = 'none';
             }
 
             // Show the pane matching the index
