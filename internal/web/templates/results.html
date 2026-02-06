@@ -12,7 +12,7 @@
             <span class="error-indicator">latest crawl failed</span>
             {{end}}
         </div>
-        {{if .CanForceRefresh}}
+        {{if and .CanForceRefresh .IsCached}}
         <form class="refresh-form" method="POST" action="/refresh" hx-post="/refresh" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
             <input type="hidden" name="domain" value="{{.Domain}}">
             <button type="submit" class="btn btn-secondary btn-sm">
@@ -44,6 +44,9 @@
                 {{end}}
                 {{if .ChainGraph.Legend.HasMissing}}
                 <span class="legend-item"><span class="legend-swatch legend-swatch-missing"></span> Missing</span>
+                {{end}}
+                {{if .ChainGraph.Legend.HasExpired}}
+                <span class="legend-item">⛔ Expired Certificate</span>
                 {{end}}
             </div>
         </div>
@@ -166,9 +169,9 @@
     <div id="chain-view-section">
         <div class="chain-view-header">
             <h3 class="chain-view-heading">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>Downloaded Certificate Chain
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>Certificate Chain
             </h3>
-            <p class="chain-view-description">The complete certificate chain as presented during the TLS handshake.</p>
+            <p class="chain-view-description">The certificate chain as presented by the server during the TLS handshake.</p>
         </div>
         <div class="chain-container">
             {{range $index, $cert := .Chain}}

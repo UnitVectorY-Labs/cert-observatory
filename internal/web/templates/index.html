@@ -177,21 +177,61 @@
                 }
             }
 
-            const activeNode = document.getElementById(nodeId);
-            selectTrustPathCert(activeNode, certIdx);
+            selectTrustPathCert(nodeId, certIdx);
+        }
+
+        function findRenderedMermaidNodes(nodeId) {
+            if (!nodeId) return [];
+
+            var normalizedNodeId = String(nodeId);
+            var escapedNodeId = normalizedNodeId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            var byDataId = document.querySelectorAll('.trust-path-mermaid .node[data-id="' + escapedNodeId + '"]');
+            if (byDataId.length > 0) return Array.from(byDataId);
+
+            var direct = document.getElementById(normalizedNodeId);
+            if (direct && direct.classList && direct.classList.contains('node')) {
+                return [direct];
+            }
+
+            var allNodes = document.querySelectorAll('.trust-path-mermaid .node');
+            var matches = [];
+            for (var i = 0; i < allNodes.length; i++) {
+                var candidateId = allNodes[i].id || '';
+                if (candidateId === normalizedNodeId || candidateId.indexOf('-' + normalizedNodeId + '-') !== -1) {
+                    matches.push(allNodes[i]);
+                }
+            }
+            return matches;
+        }
+
+        function setTrustPathNodeSelected(nodeEl, isSelected) {
+            if (!nodeEl) return;
+
+            var shapes = nodeEl.querySelectorAll('rect, polygon, path, circle, ellipse');
+            for (var i = 0; i < shapes.length; i++) {
+                if (isSelected) {
+                    shapes[i].style.setProperty('stroke-width', '5px', 'important');
+                } else {
+                    shapes[i].style.removeProperty('stroke-width');
+                }
+            }
         }
 
         // Trust path graph: reveal the pre-rendered detail pane for the clicked node
-        function selectTrustPathCert(activeNodeEl, certIdx) {
+        function selectTrustPathCert(nodeId, certIdx) {
             if (certIdx < 0) return; // missing cert – nothing to show
 
             // Remove highlight from all graph nodes
             var allNodes = document.querySelectorAll('.trust-path-mermaid .node');
             for (var i = 0; i < allNodes.length; i++) {
                 allNodes[i].classList.remove('tp-active');
+                setTrustPathNodeSelected(allNodes[i], false);
             }
-            if (activeNodeEl) {
-                activeNodeEl.classList.add('tp-active');
+
+            var activeNodes = findRenderedMermaidNodes(nodeId);
+            for (var k = 0; k < activeNodes.length; k++) {
+                activeNodes[k].classList.add('tp-active');
+                setTrustPathNodeSelected(activeNodes[k], true);
             }
 
             // Hide the downloaded chain section
@@ -212,7 +252,7 @@
             var targetPane = document.getElementById('trust-cert-pane-' + certIdx);
             if (targetPane) {
                 targetPane.style.display = 'block';
-                targetPane.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+                targetPane.scrollIntoView({behavior: 'smooth', block: 'start'});
             }
         }
     </script>

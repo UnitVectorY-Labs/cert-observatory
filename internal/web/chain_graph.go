@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // maxGraphDepth limits the depth of the chain graph to prevent infinite recursion.
@@ -26,6 +27,8 @@ type ChainGraphNode struct {
 	IsSelfSigned bool
 	// IsMissing indicates the issuer was identified but no matching certificate was found.
 	IsMissing bool
+	// IsExpired indicates the certificate is expired as of graph build time.
+	IsExpired bool
 	// CertIndex is the index into ChainGraphData.AllCerts (-1 if missing).
 	CertIndex int
 	// Issuers are the certificates whose public key signed this certificate.
@@ -52,6 +55,7 @@ type ChainGraphLegend struct {
 	HasIntermediateCA    bool
 	HasRootCA            bool
 	HasMissing           bool
+	HasExpired           bool
 }
 
 // chainGraphBuilder builds the certificate trust path graph.
@@ -115,6 +119,7 @@ type mermaidGraphBuilder struct {
 	classMembers    map[string][]string
 	edges           map[string]bool
 	lines           []string
+	hasExpired      bool
 }
 
 func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGraphLegend) {
@@ -169,6 +174,7 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		HasIntermediateCA:    len(b.classMembers["intermediate"]) > 0,
 		HasRootCA:            len(b.classMembers["root"]) > 0,
 		HasMissing:           len(b.classMembers["missing"]) > 0,
+		HasExpired:           b.hasExpired,
 	}
 
 	return strings.Join(b.lines, "\n"), b.nodeToCertIndex, legend
@@ -249,6 +255,10 @@ func (b *mermaidGraphBuilder) ensureNode(node *ChainGraphNode) string {
 	if label == "" {
 		label = "(unknown subject)"
 	}
+	if node.IsExpired {
+		label = "⛔ " + label
+		b.hasExpired = true
+	}
 	label = escapeMermaidLabel(label)
 	b.lines = append(b.lines, fmt.Sprintf("%s[\"%s\"]", nodeID, label))
 
@@ -302,6 +312,7 @@ func (b *chainGraphBuilder) buildNode(cert *CertificateResult, visited map[strin
 		IssuerDN:     certIssuerDN(cert),
 		InChain:      b.chainSet[hashHex],
 		IsSelfSigned: selfSigned,
+		IsExpired:    isExpiredAt(cert, time.Now()),
 		CertIndex:    certIdx,
 	}
 
@@ -417,4 +428,17 @@ func certIssuerDN(cert *CertificateResult) string {
 		return cert.Parsed.Issuer.String()
 	}
 	return cert.Issuer
+}
+
+func isExpiredAt(cert *CertificateResult, now time.Time) bool {
+	if cert == nil {
+		return false
+	}
+	if cert.Parsed != nil {
+		return now.After(cert.Parsed.NotAfter)
+	}
+	if cert.NotAfter.IsZero() {
+		return false
+	}
+	return now.After(cert.NotAfter)
 }
