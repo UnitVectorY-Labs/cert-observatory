@@ -155,14 +155,28 @@
             </h3>
             <p class="trust-path-description">Click a certificate to view its details below the graph.</p>
             <div class="trust-path-legend">
-                <span class="legend-item"><span class="legend-swatch legend-swatch-chain"></span> In chain</span>
-                <span class="legend-item"><span class="legend-swatch legend-swatch-selfsigned"></span> Self-signed</span>
-                <span class="legend-item"><span class="legend-swatch legend-swatch-discovered"></span> Discovered</span>
+                <span class="legend-item"><span class="legend-swatch legend-swatch-chain"></span> Presented In Chain</span>
+                {{if .ChainGraph.Legend.HasServerCertificate}}
+                <span class="legend-item"><span class="legend-swatch legend-swatch-leaf"></span> Server Certificate</span>
+                {{end}}
+                {{if .ChainGraph.Legend.HasIntermediateCA}}
+                <span class="legend-item"><span class="legend-swatch legend-swatch-intermediate"></span> Intermediate CA</span>
+                {{end}}
+                {{if .ChainGraph.Legend.HasRootCA}}
+                <span class="legend-item"><span class="legend-swatch legend-swatch-root"></span> Root CA</span>
+                {{end}}
+                {{if .ChainGraph.Legend.HasMissing}}
                 <span class="legend-item"><span class="legend-swatch legend-swatch-missing"></span> Missing</span>
+                {{end}}
             </div>
         </div>
-        <div class="trust-path-graph" id="trust-path-graph">
-            {{template "graphNode" .ChainGraph.Root}}
+        <div class="trust-path-graph">
+            <div class="trust-path-mermaid">
+                <pre class="mermaid">{{.ChainGraph.MermaidDiagram}}</pre>
+                {{range $nodeID, $idx := .ChainGraph.MermaidNodeToCertIndex}}
+                <span class="tp-node-map" data-node-id="{{$nodeID}}" data-cert-idx="{{$idx}}" hidden></span>
+                {{end}}
+            </div>
         </div>
 
         <div class="trust-path-detail" id="trust-path-detail">
@@ -264,28 +278,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-        {{end}}
-    </div>
-    {{end}}
-</div>
-{{end}}
-
-{{define "graphNode"}}
-<div class="tp-node-wrap">
-    <div class="tp-card{{if .InChain}} tp-card-inchain{{end}}{{if .IsSelfSigned}} tp-card-selfsigned{{end}}{{if .IsMissing}} tp-card-missing{{end}}{{if not (or .InChain .IsSelfSigned .IsMissing)}} tp-card-discovered{{end}}" data-cert-idx="{{.CertIndex}}" onclick="selectTrustPathCert(this, {{.CertIndex}})">
-        <span class="tp-card-label">{{.SubjectCN}}</span>
-        {{if .IsMissing}}<span class="tp-card-badge tp-badge-missing">not available</span>{{end}}
-        {{if .IsSelfSigned}}<span class="tp-card-badge tp-badge-root">root</span>{{end}}
-        {{if .InChain}}<span class="tp-card-badge tp-badge-chain">in chain</span>{{end}}
-    </div>
-    {{if .Issuers}}
-    <div class="tp-connector-down"></div>
-    <div class="tp-children-row">
-        {{range .Issuers}}
-        <div class="tp-branch">
-            <div class="tp-connector-up"></div>
-            {{template "graphNode" .}}
         </div>
         {{end}}
     </div>
