@@ -25,6 +25,8 @@ type CrawlDomainsConfig struct {
 	Rate int
 	// Timeout for each crawl operation
 	Timeout time.Duration
+	// MaxCrawlSize is the maximum number of domains to crawl in a single run
+	MaxCrawlSize int
 	// Verbose enables debug logging
 	Verbose bool
 	// IgnoreErrors ignores backoff errors and crawls domains anyway
@@ -44,6 +46,7 @@ func DefaultCrawlDomainsConfig() *CrawlDomainsConfig {
 		Parallel:         2,
 		Rate:             -1, // unlimited by default
 		Timeout:          10 * time.Second,
+		MaxCrawlSize:     100,
 		IgnoreErrors:     false,
 		IncludeNonPublic: false,
 		Stderr:           os.Stderr,
@@ -75,9 +78,14 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 		"age_days", cfg.AgeDays,
 		"parallel", cfg.Parallel,
 		"rate", cfg.Rate,
+		"max_crawl_size", cfg.MaxCrawlSize,
 		"ignore_errors", cfg.IgnoreErrors,
 		"include_non_public", cfg.IncludeNonPublic,
 	)
+
+	if cfg.MaxCrawlSize <= 0 {
+		return fmt.Errorf("max crawl size must be greater than 0")
+	}
 
 	// Connect to database
 	database, err := db.Open(cfg.DBConfig)
@@ -123,10 +131,7 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 
 	logger.Info("found eligible domains", "count", totalEligible)
 
-	// Fetch eligible domains (fetch in batches but for simplicity, get all at once)
-	// Batching to improve efficiency of large queries
-	const batchLimit = 100
-	domains, err := repo.GetEligibleDomainsForCrawlWithOptions(ctx, effectiveAge, batchLimit, opts)
+	domains, err := repo.GetEligibleDomainsForCrawlWithOptions(ctx, effectiveAge, cfg.MaxCrawlSize, opts)
 	if err != nil {
 		logger.Error("failed to get eligible domains", "error", err)
 		return fmt.Errorf("get eligible domains: %w", err)

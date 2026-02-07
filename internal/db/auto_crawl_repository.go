@@ -24,19 +24,19 @@ type CrawlDomainsOptions struct {
 
 // BackoffPolicy defines the exponential backoff parameters.
 type BackoffPolicy struct {
-	BaseDelay    time.Duration
-	Multiplier   float64
-	MaxDelay     time.Duration
-	MaxBackoff   time.Duration // Maximum total backoff (e.g., 1 month)
+	BaseDelay  time.Duration
+	Multiplier float64
+	MaxDelay   time.Duration
+	MaxBackoff time.Duration // Maximum total backoff (e.g., 1 month)
 }
 
 // DefaultBackoffPolicy returns the default backoff policy.
 func DefaultBackoffPolicy() *BackoffPolicy {
 	return &BackoffPolicy{
-		BaseDelay:    1 * time.Hour,
-		Multiplier:   2.0,
-		MaxDelay:     7 * 24 * time.Hour, // 7 days cap per retry
-		MaxBackoff:   30 * 24 * time.Hour, // 1 month maximum
+		BaseDelay:  1 * time.Hour,
+		Multiplier: 2.0,
+		MaxDelay:   7 * 24 * time.Hour,  // 7 days cap per retry
+		MaxBackoff: 30 * 24 * time.Hour, // 1 month maximum
 	}
 }
 
@@ -75,7 +75,16 @@ func (r *Repository) GetEligibleDomainsForCrawl(ctx context.Context, effectiveAg
 		WHERE auto_crawl = true
 		  AND (no_retry_before IS NULL OR no_retry_before <= now())
 		  AND (last_success_at IS NULL OR last_success_at <= $1)
-		ORDER BY last_success_at NULLS FIRST, domain
+		ORDER BY
+			CASE
+				WHEN last_success_at IS NULL AND last_failure_at IS NULL THEN 0
+				ELSE 1
+			END,
+			GREATEST(
+				COALESCE(last_success_at, '-infinity'::timestamptz),
+				COALESCE(last_failure_at, '-infinity'::timestamptz)
+			),
+			domain
 		LIMIT $2
 	`
 
@@ -237,7 +246,17 @@ func (r *Repository) GetEligibleDomainsForCrawlWithOptions(ctx context.Context, 
 	}
 
 	query += ` AND (last_success_at IS NULL OR last_success_at <= $1)`
-	query += ` ORDER BY last_success_at NULLS FIRST, domain LIMIT $2`
+	query += ` ORDER BY
+		CASE
+			WHEN last_success_at IS NULL AND last_failure_at IS NULL THEN 0
+			ELSE 1
+		END,
+		GREATEST(
+			COALESCE(last_success_at, '-infinity'::timestamptz),
+			COALESCE(last_failure_at, '-infinity'::timestamptz)
+		),
+		domain
+		LIMIT $2`
 
 	rows, err := r.db.QueryContext(ctx, query, threshold, limit)
 	if err != nil {
