@@ -68,7 +68,7 @@ func (e *testError) Error() string {
 
 func TestEffectiveAgeCalculationForCrawlDomains(t *testing.T) {
 	tests := []struct {
-		ageDays    int
+		ageDays       int
 		expectedHours int
 	}{
 		{1, 23},   // 1 day = 23 hours
@@ -105,6 +105,10 @@ func TestDefaultCrawlDomainsConfig(t *testing.T) {
 
 	if cfg.Timeout != 10*time.Second {
 		t.Errorf("Timeout = %v, want 10s", cfg.Timeout)
+	}
+
+	if cfg.MaxCrawlSize != 100 {
+		t.Errorf("MaxCrawlSize = %d, want 100", cfg.MaxCrawlSize)
 	}
 
 	if cfg.IgnoreErrors {

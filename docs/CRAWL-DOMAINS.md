@@ -20,6 +20,8 @@ The `crawl-domains` command selects domains from the database that are due for r
 
 This command is designed to be run as a scheduled job (e.g., via cron or a Kubernetes CronJob) to keep the certificate data fresh.
 
+Each run processes at most `max-crawl-size` eligible domains (default: 100).
+
 ### Domain Eligibility
 
 A domain is eligible for crawling when:
@@ -28,6 +30,11 @@ A domain is eligible for crawling when:
 2. **Not in backoff**: `no_retry_before` is NULL or in the past (unless `--ignore-errors` is set)
 3. **Popular domain**: `popular_domain = true` (unless `--include-non-public` is set)
 4. **Due by age**: `last_success_at` is NULL (never crawled) or older than the effective age threshold
+
+Eligible domains are processed in this order:
+
+1. Never-attempted domains first (`last_success_at` and `last_failure_at` are NULL)
+2. Then previously attempted domains, oldest last-attempt first (using the most recent of `last_success_at` or `last_failure_at`)
 
 ### Effective Age Calculation
 
@@ -73,6 +80,7 @@ A value of `-1` (the default) means unlimited, where domains are dispatched as f
 | `--age-days` | `CERT_OBS_CRAWL_AGE_DAYS` | `1` | Days since last crawl to qualify for re-crawl |
 | `--parallel` | `CERT_OBS_CRAWL_PARALLEL` | `2` | Number of domains to crawl concurrently |
 | `--rate` | `CERT_OBS_CRAWL_RATE` | `-1` | Maximum crawls per second, -1 for unlimited |
+| `--max-crawl-size` | `CERT_OBS_CRAWL_MAX_SIZE` | `100` | Maximum number of eligible domains to crawl per run |
 | `--timeout` | - | `10s` | Timeout for each crawl operation |
 | `--verbose` | - | `false` | Enable verbose/debug logging |
 | `--ignore-errors` | `CERT_OBS_CRAWL_IGNORE_ERRORS` | `false` | Ignore backoff errors and crawl domains anyway |
@@ -89,12 +97,16 @@ cert-observatory crawl-domains
 # Weekly crawl with higher parallelism
 cert-observatory crawl-domains --age-days 7 --parallel 8
 
+# Crawl at most 250 domains in this run
+cert-observatory crawl-domains --max-crawl-size 250
+
 # Rate-limited crawl (1 request per second)
 cert-observatory crawl-domains --rate 1
 
 # Using environment variables
 export CERT_OBS_CRAWL_AGE_DAYS=1
 export CERT_OBS_CRAWL_PARALLEL=4
+export CERT_OBS_CRAWL_MAX_SIZE=250
 cert-observatory crawl-domains
 
 # With verbose logging for debugging

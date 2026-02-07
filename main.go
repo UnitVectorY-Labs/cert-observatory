@@ -257,6 +257,11 @@ This allows the job to run daily with a small overlap window for idempotency.`,
 					cfg.Rate = v
 				}
 			}
+			if maxSize := os.Getenv("CERT_OBS_CRAWL_MAX_SIZE"); maxSize != "" {
+				if v, err := strconv.Atoi(maxSize); err == nil {
+					cfg.MaxCrawlSize = v
+				}
+			}
 			if ignoreErrors := os.Getenv("CERT_OBS_CRAWL_IGNORE_ERRORS"); ignoreErrors != "" {
 				cfg.IgnoreErrors = ignoreErrors == "true" || ignoreErrors == "1"
 			}
@@ -274,6 +279,7 @@ This allows the job to run daily with a small overlap window for idempotency.`,
 	c.Flags().IntVar(&cfg.AgeDays, "age-days", 1, "Days since last crawl to qualify for re-crawl (env: CERT_OBS_CRAWL_AGE_DAYS)")
 	c.Flags().IntVar(&cfg.Parallel, "parallel", 2, "Number of domains to crawl concurrently (env: CERT_OBS_CRAWL_PARALLEL)")
 	c.Flags().IntVar(&cfg.Rate, "rate", -1, "Maximum crawls per second, -1 for unlimited (env: CERT_OBS_CRAWL_RATE)")
+	c.Flags().IntVar(&cfg.MaxCrawlSize, "max-crawl-size", 100, "Maximum number of eligible domains to crawl per run (env: CERT_OBS_CRAWL_MAX_SIZE)")
 	c.Flags().DurationVar(&cfg.Timeout, "timeout", 10*time.Second, "Timeout for each crawl operation")
 	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
 	c.Flags().BoolVar(&cfg.IgnoreErrors, "ignore-errors", false, "Ignore backoff errors and crawl domains anyway (env: CERT_OBS_CRAWL_IGNORE_ERRORS)")
