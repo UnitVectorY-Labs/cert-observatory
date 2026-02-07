@@ -58,6 +58,14 @@ type ChainGraphLegend struct {
 	HasExpired           bool
 }
 
+// ChainGraphFilters controls which certificates are included in the graph.
+type ChainGraphFilters struct {
+	// ShowNonChainCerts includes certificates found in DB but not returned by server
+	ShowNonChainCerts bool
+	// ShowExpired includes expired certificates from DB
+	ShowExpired bool
+}
+
 // chainGraphBuilder builds the certificate trust path graph.
 type chainGraphBuilder struct {
 	repo      Repository
@@ -65,12 +73,13 @@ type chainGraphBuilder struct {
 	chainSet  map[string]bool // hashes of certs in the TLS chain
 	allCerts  []*CertViewData // accumulated unique certs for detail display
 	certIndex map[string]int  // hash -> index in allCerts
+	filters   ChainGraphFilters
 }
 
 // buildChainGraph constructs the certificate trust path tree for display.
 // It starts from the leaf certificate and recursively finds valid issuers
 // from the database, validating actual cryptographic signatures.
-func buildChainGraph(ctx context.Context, repo Repository, chainCerts []*CertificateResult) *ChainGraphData {
+func buildChainGraph(ctx context.Context, repo Repository, chainCerts []*CertificateResult, filters ChainGraphFilters) *ChainGraphData {
 	if len(chainCerts) == 0 {
 		return nil
 	}
@@ -81,6 +90,7 @@ func buildChainGraph(ctx context.Context, repo Repository, chainCerts []*Certifi
 		chainSet:  make(map[string]bool),
 		allCerts:  nil,
 		certIndex: make(map[string]int),
+		filters:   filters,
 	}
 
 	// Populate chain set from the provided chain
@@ -366,10 +376,26 @@ func (b *chainGraphBuilder) findValidIssuers(cert *CertificateResult) []*Certifi
 		}
 
 		var valid []*CertificateResult
+		now := time.Now()
 		for _, candidate := range candidates {
 			if candidate.Parsed == nil {
 				continue
 			}
+
+			// Apply filters
+			candidateHashHex := hex.EncodeToString(candidate.CertHash)
+			inChain := b.chainSet[candidateHashHex]
+
+			// If not in chain and ShowNonChainCerts is false, skip
+			if !inChain && !b.filters.ShowNonChainCerts {
+				continue
+			}
+
+			// If expired and ShowExpired is false and not in chain, skip
+			if !inChain && !b.filters.ShowExpired && isExpiredAt(candidate, now) {
+				continue
+			}
+
 			// Validate the actual cryptographic signature
 			if err := candidate.Parsed.CheckSignature(
 				cert.Parsed.SignatureAlgorithm,

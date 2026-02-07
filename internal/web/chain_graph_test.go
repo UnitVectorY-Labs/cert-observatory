@@ -218,7 +218,7 @@ func TestBuildChainGraph_SimpleChain(t *testing.T) {
 
 	chainCerts := []*CertificateResult{leaf.result, inter.result, root.result}
 
-	graph := buildChainGraph(context.Background(), repo, chainCerts)
+	graph := buildChainGraph(context.Background(), repo, chainCerts, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
 	if graph == nil {
 		t.Fatal("expected non-nil graph")
 	}
@@ -298,7 +298,7 @@ func TestBuildChainGraph_MermaidStylingAndGrouping(t *testing.T) {
 	// Only leaf and intermediate are in the presented TLS chain.
 	chainCerts := []*CertificateResult{leaf.result, inter.result}
 
-	graph := buildChainGraph(context.Background(), repo, chainCerts)
+	graph := buildChainGraph(context.Background(), repo, chainCerts, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
 	if graph == nil {
 		t.Fatal("expected non-nil graph")
 	}
@@ -340,7 +340,7 @@ func TestBuildChainGraph_OutOfChainRoot(t *testing.T) {
 	// Only leaf and intermediate in the TLS chain
 	chainCerts := []*CertificateResult{leaf.result, inter.result}
 
-	graph := buildChainGraph(context.Background(), repo, chainCerts)
+	graph := buildChainGraph(context.Background(), repo, chainCerts, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
 	if graph == nil {
 		t.Fatal("expected non-nil graph")
 	}
@@ -381,7 +381,7 @@ func TestBuildChainGraph_MissingIssuer(t *testing.T) {
 
 	chainCerts := []*CertificateResult{leaf.result, inter.result}
 
-	graph := buildChainGraph(context.Background(), repo, chainCerts)
+	graph := buildChainGraph(context.Background(), repo, chainCerts, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
 	if graph == nil {
 		t.Fatal("expected non-nil graph")
 	}
@@ -421,7 +421,7 @@ func TestBuildChainGraph_ExpiredCertLegendAndLabel(t *testing.T) {
 
 	chainCerts := []*CertificateResult{leaf.result, inter.result, root.result}
 
-	graph := buildChainGraph(context.Background(), repo, chainCerts)
+	graph := buildChainGraph(context.Background(), repo, chainCerts, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
 	if graph == nil {
 		t.Fatal("expected non-nil graph")
 	}
@@ -511,7 +511,7 @@ func TestBuildChainGraph_CrossSigning(t *testing.T) {
 	// Chain only contains leaf and interA
 	chainCerts := []*CertificateResult{leaf.result, interA}
 
-	graph := buildChainGraph(context.Background(), repo, chainCerts)
+	graph := buildChainGraph(context.Background(), repo, chainCerts, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
 	if graph == nil {
 		t.Fatal("expected non-nil graph")
 	}
@@ -524,12 +524,12 @@ func TestBuildChainGraph_CrossSigning(t *testing.T) {
 
 func TestBuildChainGraph_EmptyChain(t *testing.T) {
 	repo := newSKILookupRepo()
-	graph := buildChainGraph(context.Background(), repo, nil)
+	graph := buildChainGraph(context.Background(), repo, nil, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
 	if graph != nil {
 		t.Error("expected nil graph for empty chain")
 	}
 
-	graph = buildChainGraph(context.Background(), repo, []*CertificateResult{})
+	graph = buildChainGraph(context.Background(), repo, []*CertificateResult{}, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
 	if graph != nil {
 		t.Error("expected nil graph for zero-length chain")
 	}

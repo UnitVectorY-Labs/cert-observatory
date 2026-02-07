@@ -46,6 +46,9 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse filter options
+	filters := parseChainGraphFilters(r)
+
 	// Check for IP literals (SSRF prevention)
 	if isIPLiteral(normalizedDomain) {
 		s.renderError(w, r, "Invalid Domain", "IP addresses are not allowed. Please enter a domain name.", http.StatusBadRequest)
@@ -69,7 +72,7 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil && domainResult != nil && domainResult.HasChain && !canRefresh {
 		// Use cached data
-		s.renderCachedResults(w, r, domainResult, false)
+		s.renderCachedResults(w, r, domainResult, false, filters)
 		return
 	}
 
@@ -80,7 +83,7 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 
 		// If we have cached data, show it with an error notice
 		if domainResult != nil && domainResult.HasChain {
-			s.renderCachedResultsWithError(w, r, domainResult, crawlErr)
+			s.renderCachedResultsWithError(w, r, domainResult, crawlErr, filters)
 			return
 		}
 
@@ -89,7 +92,7 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Render fresh results
-	s.renderFreshResults(w, r, result)
+	s.renderFreshResults(w, r, result, filters)
 }
 
 // handleRefresh handles force refresh requests (POST only, can trigger crawl).
@@ -104,6 +107,15 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.renderError(w, r, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
 		return
+	}
+
+	// Use default filters for refresh (show everything)
+	// Note: Force refresh intentionally shows all certificates to give users
+	// the most complete view of the certificate chain when they explicitly
+	// request a fresh crawl. Users can adjust filters on subsequent inspects.
+	filters := ChainGraphFilters{
+		ShowNonChainCerts: true,
+		ShowExpired:       true,
 	}
 
 	// Check if forced refresh is allowed
@@ -127,7 +139,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		// Try to get cached data
 		domainResult, _ := s.repo.GetDomainWithChain(r.Context(), normalizedDomain)
 		if domainResult != nil && domainResult.HasChain {
-			s.renderCachedResultsWithError(w, r, domainResult, crawlErr)
+			s.renderCachedResultsWithError(w, r, domainResult, crawlErr, filters)
 			return
 		}
 
@@ -135,7 +147,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.renderFreshResults(w, r, result)
+	s.renderFreshResults(w, r, result, filters)
 }
 
 // handleCertDetails returns certificate details for a specific cert.
@@ -300,24 +312,24 @@ func (s *Server) renderReservedDomainError(w http.ResponseWriter, r *http.Reques
 }
 
 // renderCachedResults renders cached results.
-func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, result *DomainResult, lastCrawlFailed bool) {
+func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, result *DomainResult, lastCrawlFailed bool, filters ChainGraphFilters) {
 	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
 
 	data := buildResultsViewData(result, true, canForce, waitTime, lastCrawlFailed)
 
 	// Build the chain graph from the chain certificates
-	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain)
+	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain, filters)
 
 	s.renderResults(w, r, data)
 }
 
 // renderCachedResultsWithError renders cached results with an error notice.
-func (s *Server) renderCachedResultsWithError(w http.ResponseWriter, r *http.Request, result *DomainResult, crawlErr error) {
-	s.renderCachedResults(w, r, result, true)
+func (s *Server) renderCachedResultsWithError(w http.ResponseWriter, r *http.Request, result *DomainResult, crawlErr error, filters ChainGraphFilters) {
+	s.renderCachedResults(w, r, result, true, filters)
 }
 
 // renderFreshResults renders fresh crawl results.
-func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, result *CrawlOutput) {
+func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, result *CrawlOutput, filters ChainGraphFilters) {
 	// Convert crawl output to domain result format
 	domainResult := &DomainResult{
 		Domain:    result.Domain,
@@ -331,7 +343,7 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 	data := buildResultsViewData(domainResult, false, canForce, waitTime, false)
 
 	// Build the chain graph from the chain certificates
-	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain)
+	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain, filters)
 
 	s.renderResults(w, r, data)
 }
@@ -358,6 +370,15 @@ func (s *Server) renderResults(w http.ResponseWriter, r *http.Request, data *Res
 }
 
 // Helper functions
+
+func parseChainGraphFilters(r *http.Request) ChainGraphFilters {
+	// Default values: ShowNonChainCerts=true, ShowExpired=false
+	// Checkboxes only send value when checked
+	return ChainGraphFilters{
+		ShowNonChainCerts: r.FormValue("showNonChainCerts") == "true",
+		ShowExpired:       r.FormValue("showExpired") == "true",
+	}
+}
 
 func generateLockID() string {
 	b := make([]byte, 16)
