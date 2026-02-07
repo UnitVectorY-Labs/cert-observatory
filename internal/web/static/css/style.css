@@ -158,6 +158,43 @@ header p {
   color: var(--text-muted);
 }
 
+/* Filter options */
+.filter-options {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter-option:hover {
+  color: var(--text-primary);
+}
+
+.filter-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.filter-option svg {
+  flex-shrink: 0;
+}
+
+.filter-option span {
+  flex: 1;
+}
+
 .btn {
   padding: 0.625rem 1.25rem;
   font-size: 0.9rem;
