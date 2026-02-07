@@ -4,7 +4,7 @@ go 1.25.6 // GOVERSION
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.18.3
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.1
 	github.com/spf13/cobra v1.9.1
 	gopkg.in/yaml.v3 v3.0.1
 )
