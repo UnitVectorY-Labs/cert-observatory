@@ -110,6 +110,9 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use default filters for refresh (show everything)
+	// Note: Force refresh intentionally shows all certificates to give users
+	// the most complete view of the certificate chain when they explicitly
+	// request a fresh crawl. Users can adjust filters on subsequent inspects.
 	filters := ChainGraphFilters{
 		ShowNonChainCerts: true,
 		ShowExpired:       true,
