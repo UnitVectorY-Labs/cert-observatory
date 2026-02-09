@@ -1,4 +1,4 @@
-title: cert-observatory/
+title: cert-observatory
 description: "Fetches the TLS certificate chain presented by a domain and renders each certificate in an easy-to-inspect format with decoded details and raw PEM."
 
 remote_theme: just-the-docs/just-the-docs@v0.12.0
@@ -7,7 +7,7 @@ plugins:
 
 # Aux links for the upper right navigation
 aux_links:
-  "cert-observatory/ on GitHub":
+  "cert-observatory on GitHub":
     - "https://github.com/UnitVectorY-Labs/cert-observatory/"
 
 # Footer "Edit this page on GitHub" link text
