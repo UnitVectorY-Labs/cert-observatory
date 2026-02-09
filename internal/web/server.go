@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -206,7 +207,27 @@ func (s *Server) wrapWithOriginCheck(handler http.HandlerFunc) http.HandlerFunc 
 // securityHeadersMiddleware adds security headers to all responses.
 func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'")
+
+		scriptSrc := []string{
+			"'self'",
+			"'unsafe-inline'",
+			"https://cdn.jsdelivr.net",
+			"https://static.cloudflareinsights.com",
+		}
+
+		cspDirectives := []string{
+			"default-src 'self'",
+			"script-src " + strings.Join(scriptSrc, " "),
+			"script-src-elem " + strings.Join(scriptSrc, " "),
+			"style-src 'self' 'unsafe-inline'",
+			// Optional: lock down other common sinks.
+			// "img-src 'self' data:",
+			// "font-src 'self'",
+			// "connect-src 'self'",
+		}
+
+		w.Header().Set("Content-Security-Policy", strings.Join(cspDirectives, "; "))
+
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
