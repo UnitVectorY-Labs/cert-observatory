@@ -1,162 +1,171 @@
 {{define "results"}}
-<div class="results-section fade-in">
+<div class="results-wrap">
     <div class="results-toolbar">
-        <div class="domain-info">
+        <div class="status-row">
             <span class="domain-name">{{.Domain}}</span>
             {{if .IsCached}}
-            <span class="cache-indicator">cached {{.CacheAge}}</span>
+            <span class="status-chip status-cached">cached {{.CacheAge}}</span>
             {{else}}
-            <span class="fresh-indicator">fresh</span>
+            <span class="status-chip status-fresh">fresh</span>
             {{end}}
             {{if .LastCrawlFailed}}
-            <span class="error-indicator">latest crawl failed</span>
+            <span class="status-chip status-error">latest crawl failed</span>
             {{end}}
         </div>
         {{if and .CanForceRefresh .IsCached}}
-        <form class="refresh-form" method="POST" action="/refresh" hx-post="/refresh" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
+        <form method="POST" action="/refresh" class="inline" hx-post="/refresh" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
             <input type="hidden" name="domain" value="{{.Domain}}">
-            <button type="submit" class="btn btn-secondary btn-sm">
-                <span class="htmx-indicator spinner"></span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-refresh"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-                <span class="btn-text-mobile-hidden">Refresh</span>
+            <button type="submit" class="btn-secondary">
+                <span class="htmx-indicator h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-slate-100 dark:border-slate-500 dark:border-t-slate-100"></span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+                <span class="hidden sm:inline">Refresh</span>
             </button>
         </form>
         {{end}}
     </div>
 
     {{if .ChainGraph}}
-    <div class="trust-path-section">
-        <div class="trust-path-header">
-            <h3>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>Certificate Trust Path
+    <div class="section-card">
+        <div>
+            <h3 class="section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle" style="margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>Certificate Trust Path
             </h3>
-            <p class="trust-path-description">Click a certificate to view its details.</p>
-            <div class="trust-path-legend">
-                <span class="legend-item"><span class="legend-swatch legend-swatch-chain"></span> Presented In Chain</span>
+            <p class="section-copy">Click a certificate to view its details.</p>
+            <div class="legend-row">
+                <span class="legend-item"><span class="legend-swatch legend-chain"></span> Presented In Chain</span>
                 {{if .ChainGraph.Legend.HasServerCertificate}}
-                <span class="legend-item"><span class="legend-swatch legend-swatch-leaf"></span> Server Certificate</span>
+                <span class="legend-item"><span class="legend-swatch legend-leaf"></span> Server Certificate</span>
                 {{end}}
                 {{if .ChainGraph.Legend.HasIntermediateCA}}
-                <span class="legend-item"><span class="legend-swatch legend-swatch-intermediate"></span> Intermediate CA</span>
+                <span class="legend-item"><span class="legend-swatch legend-intermediate"></span> Intermediate CA</span>
                 {{end}}
                 {{if .ChainGraph.Legend.HasRootCA}}
-                <span class="legend-item"><span class="legend-swatch legend-swatch-root"></span> Root CA</span>
+                <span class="legend-item"><span class="legend-swatch legend-root"></span> Root CA</span>
                 {{end}}
                 {{if .ChainGraph.Legend.HasMissing}}
-                <span class="legend-item"><span class="legend-swatch legend-swatch-missing"></span> Missing</span>
+                <span class="legend-item"><span class="legend-swatch legend-missing"></span> Missing</span>
                 {{end}}
                 {{if .ChainGraph.Legend.HasExpired}}
                 <span class="legend-item">⛔ Expired Certificate</span>
                 {{end}}
             </div>
         </div>
-        <div class="trust-path-graph">
-            <div class="trust-path-mermaid">
-                <pre class="mermaid">{{.ChainGraph.MermaidDiagram}}</pre>
-                {{range $nodeID, $idx := .ChainGraph.MermaidNodeToCertIndex}}
-                <span class="tp-node-map" data-node-id="{{$nodeID}}" data-cert-idx="{{$idx}}" hidden></span>
-                {{end}}
+
+        <div class="graph-scroll">
+            <div class="graph-center">
+                <div class="trust-path-mermaid py-1">
+                    <pre class="mermaid">{{.ChainGraph.MermaidDiagram}}</pre>
+                    {{range $nodeID, $idx := .ChainGraph.MermaidNodeToCertIndex}}
+                    <span class="tp-node-map" data-node-id="{{$nodeID}}" data-cert-idx="{{$idx}}" hidden></span>
+                    {{end}}
+                </div>
             </div>
         </div>
 
-        <div id="selected-cert-heading" style="display:none;">
-            <h3 class="chain-view-heading">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>Selected Certificate
+        <div id="selected-cert-heading" class="selected-heading" style="display:none;">
+            <h3 class="chain-heading">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle" style="margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>Selected Certificate
             </h3>
-            <p class="chain-view-description">Viewing a single certificate selected from the trust path above.</p>
+            <p class="section-copy">Viewing a single certificate selected from the trust path above.</p>
         </div>
 
         {{range $idx, $gc := .ChainGraph.AllCerts}}
-        <div class="trust-path-cert-pane" id="trust-cert-pane-{{$idx}}" style="display:none;">
-            <div class="cert-row">
-                <div class="cert-row-content">
-                    <div class="pem-panel">
-                        <div class="pem-container">
+        <div class="trust-path-cert-pane mt-4" id="trust-cert-pane-{{$idx}}" style="display:none;">
+            <div class="cert-card">
+                <div class="cert-content">
+                    <div class="pem-column">
+                        <div class="pem-wrap">
                             <pre class="pem-block" id="pem-g{{$gc.HashHex}}">{{$gc.PEM}}</pre>
                             <button type="button" class="btn-copy" onclick="copyPEM(this, 'g{{$gc.HashHex}}')">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg>
                                 Copy PEM
                             </button>
                         </div>
                     </div>
-                    <div class="details-panel">
-                        <div class="detail-grid-2">
+                    <div class="details-stack">
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Subject</div>
-                                <div class="detail-value-box">{{$gc.SubjectDN}}</div>
+                                <div class="detail-box">{{$gc.SubjectDN}}</div>
                             </div>
                             <div class="detail-item">
                                 <div class="detail-label">Issuer</div>
-                                <div class="detail-value-box">{{$gc.IssuerDN}}</div>
+                                <div class="detail-box">{{$gc.IssuerDN}}</div>
                             </div>
                         </div>
-                        <div class="detail-grid-2">
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Not Before</div>
-                                <div class="detail-value {{if $gc.IsNotYetValid}}validity-future{{else}}validity-valid{{end}}">{{$gc.NotBeforeFormatted}}</div>
+                                <div class="detail-value {{if $gc.IsNotYetValid}}detail-future{{else}}detail-valid{{end}}">{{$gc.NotBeforeFormatted}}</div>
                             </div>
                             <div class="detail-item">
                                 <div class="detail-label">Not After</div>
-                                <div class="detail-value {{if $gc.IsExpired}}validity-expired{{else}}validity-valid{{end}}">{{$gc.NotAfterFormatted}}</div>
+                                <div class="detail-value {{if $gc.IsExpired}}detail-expired{{else}}detail-valid{{end}}">{{$gc.NotAfterFormatted}}</div>
                             </div>
                         </div>
-                        <div class="detail-grid-2">
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Serial Number</div>
-                                <div class="detail-value-box mono">{{$gc.SerialNumber}}</div>
+                                <div class="detail-box detail-box-mono">{{$gc.SerialNumber}}</div>
                             </div>
                             <div class="detail-item">
                                 <div class="detail-label">Signature Algorithm</div>
-                                <div class="detail-value-box">{{$gc.SignatureAlgorithm}}</div>
+                                <div class="detail-box">{{$gc.SignatureAlgorithm}}</div>
                             </div>
                         </div>
-                        <div class="detail-grid-2">
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Public Key</div>
-                                <div class="detail-value-box">{{$gc.PublicKeyInfo}}</div>
+                                <div class="detail-box">{{$gc.PublicKeyInfo}}</div>
                             </div>
                             {{if or $gc.IsCA $gc.HasPathLenConstraint}}
                             <div class="detail-item">
                                 <div class="detail-label">Basic Constraints</div>
-                                <div class="detail-value-box">CA: {{if $gc.IsCA}}Yes{{else}}No{{end}}{{if $gc.HasPathLenConstraint}}, Path Length: {{$gc.PathLenConstraint}}{{end}}</div>
+                                <div class="detail-box">CA: {{if $gc.IsCA}}Yes{{else}}No{{end}}{{if $gc.HasPathLenConstraint}}, Path Length: {{$gc.PathLenConstraint}}{{end}}</div>
                             </div>
                             {{end}}
                         </div>
                         {{if $gc.KeyUsage}}
                         <div class="detail-item">
                             <div class="detail-label">Key Usage</div>
-                            <div class="detail-value-box">{{$gc.KeyUsage}}</div>
+                            <div class="detail-box">{{$gc.KeyUsage}}</div>
                         </div>
                         {{end}}
                         {{if $gc.ExtKeyUsage}}
                         <div class="detail-item">
                             <div class="detail-label">Extended Key Usage</div>
-                            <div class="detail-value-box">{{$gc.ExtKeyUsage}}</div>
+                            <div class="detail-box">{{$gc.ExtKeyUsage}}</div>
                         </div>
                         {{end}}
                         {{if $gc.SANs}}
                         <div class="detail-item">
                             <div class="detail-label">Subject Alternative Names ({{len $gc.SANs}})</div>
-                            <div class="san-container">{{range $gc.SANs}}<span class="san-item">{{.}}</span>{{end}}</div>
+                            <div class="san-wrap">
+                                <div class="san-list">
+                                    {{range $gc.SANs}}
+                                    <span class="san-pill">{{.}}</span>
+                                    {{end}}
+                                </div>
+                            </div>
                         </div>
                         {{end}}
-                        <div class="detail-grid-2">
+                        <div class="detail-grid">
                             {{if $gc.SKI}}
                             <div class="detail-item">
                                 <div class="detail-label">Subject Key Identifier</div>
-                                <div class="detail-value-box mono">{{$gc.SKI}}</div>
+                                <div class="detail-box detail-box-mono">{{$gc.SKI}}</div>
                             </div>
                             {{end}}
                             {{if $gc.AKI}}
                             <div class="detail-item">
                                 <div class="detail-label">Authority Key Identifier</div>
-                                <div class="detail-value-box mono">{{$gc.AKI}}</div>
+                                <div class="detail-box detail-box-mono">{{$gc.AKI}}</div>
                             </div>
                             {{end}}
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Certificate Hash (SHA-256)</div>
-                            <div class="detail-value-box mono">{{$gc.HashHex}}</div>
+                            <div class="detail-box detail-box-mono">{{$gc.HashHex}}</div>
                         </div>
                     </div>
                 </div>
@@ -166,25 +175,27 @@
     </div>
     {{end}}
 
-    <div id="chain-view-section">
-        <div class="chain-view-header">
-            <h3 class="chain-view-heading">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>Certificate Chain
+    <div id="chain-view-section" class="chain-section">
+        <div class="mb-4">
+            <h3 class="chain-heading">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle" style="margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>Certificate Chain
             </h3>
-            <p class="chain-view-description">The certificate chain as presented by the server during the TLS handshake.</p>
+            <p class="section-copy">The certificate chain as presented by the server during the TLS handshake.</p>
         </div>
-        <div class="chain-container">
+
+        <div class="space-y-4">
             {{range $index, $cert := .Chain}}
-            <div class="cert-row">
-                <div class="cert-row-header">
-                    <span class="cert-position"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-certificate"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>{{$cert.CertLabel}}</span>
+            <div class="cert-card">
+                <div class="cert-top">
+                    <span class="cert-label"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>{{$cert.CertLabel}}</span>
                 </div>
-                <div class="cert-row-content">
-                    <div class="pem-panel">
-                        <div class="pem-container">
+
+                <div class="cert-content">
+                    <div class="pem-column">
+                        <div class="pem-wrap">
                             <pre class="pem-block" id="pem-{{$cert.HashHex}}">{{$cert.PEM}}</pre>
                             <button type="button" class="btn-copy" onclick="copyPEM(this, '{{$cert.HashHex}}')">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle">
                                     <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                                     <path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" />
                                     <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
@@ -193,55 +204,49 @@
                             </button>
                         </div>
                     </div>
-                    <div class="details-panel">
-                        <div class="detail-grid-2">
+                    <div class="details-stack">
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Subject</div>
-                                <div class="detail-value-box {{$cert.SubjectColor}}">{{$cert.SubjectDN}}</div>
+                                <div class="detail-box {{$cert.SubjectColor}}">{{$cert.SubjectDN}}</div>
                             </div>
                             <div class="detail-item">
                                 <div class="detail-label">Issuer</div>
-                                <div class="detail-value-box {{$cert.IssuerColor}}">{{$cert.IssuerDN}}</div>
+                                <div class="detail-box {{$cert.IssuerColor}}">{{$cert.IssuerDN}}</div>
                             </div>
                         </div>
 
-                        <div class="detail-grid-2">
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Not Before</div>
-                                <div class="detail-value {{if $cert.IsNotYetValid}}validity-future{{else}}validity-valid{{end}}">
-                                    {{$cert.NotBeforeFormatted}}
-                                </div>
+                                <div class="detail-value {{if $cert.IsNotYetValid}}detail-future{{else}}detail-valid{{end}}">{{$cert.NotBeforeFormatted}}</div>
                             </div>
                             <div class="detail-item">
                                 <div class="detail-label">Not After</div>
-                                <div class="detail-value {{if $cert.IsExpired}}validity-expired{{else}}validity-valid{{end}}">
-                                    {{$cert.NotAfterFormatted}}
-                                </div>
+                                <div class="detail-value {{if $cert.IsExpired}}detail-expired{{else}}detail-valid{{end}}">{{$cert.NotAfterFormatted}}</div>
                             </div>
                         </div>
 
-                        <div class="detail-grid-2">
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Serial Number</div>
-                                <div class="detail-value-box mono">{{$cert.SerialNumber}}</div>
+                                <div class="detail-box detail-box-mono">{{$cert.SerialNumber}}</div>
                             </div>
                             <div class="detail-item">
                                 <div class="detail-label">Signature Algorithm</div>
-                                <div class="detail-value-box">{{$cert.SignatureAlgorithm}}</div>
+                                <div class="detail-box">{{$cert.SignatureAlgorithm}}</div>
                             </div>
                         </div>
 
-                        <div class="detail-grid-2">
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Public Key</div>
-                                <div class="detail-value-box">{{$cert.PublicKeyInfo}}</div>
+                                <div class="detail-box">{{$cert.PublicKeyInfo}}</div>
                             </div>
                             {{if or $cert.IsCA $cert.HasPathLenConstraint}}
                             <div class="detail-item">
                                 <div class="detail-label">Basic Constraints</div>
-                                <div class="detail-value-box">
-                                    CA: {{if $cert.IsCA}}Yes{{else}}No{{end}}{{if $cert.HasPathLenConstraint}}, Path Length: {{$cert.PathLenConstraint}}{{end}}
-                                </div>
+                                <div class="detail-box">CA: {{if $cert.IsCA}}Yes{{else}}No{{end}}{{if $cert.HasPathLenConstraint}}, Path Length: {{$cert.PathLenConstraint}}{{end}}</div>
                             </div>
                             {{end}}
                         </div>
@@ -249,46 +254,48 @@
                         {{if $cert.KeyUsage}}
                         <div class="detail-item">
                             <div class="detail-label">Key Usage</div>
-                            <div class="detail-value-box">{{$cert.KeyUsage}}</div>
+                            <div class="detail-box">{{$cert.KeyUsage}}</div>
                         </div>
                         {{end}}
 
                         {{if $cert.ExtKeyUsage}}
                         <div class="detail-item">
                             <div class="detail-label">Extended Key Usage</div>
-                            <div class="detail-value-box">{{$cert.ExtKeyUsage}}</div>
+                            <div class="detail-box">{{$cert.ExtKeyUsage}}</div>
                         </div>
                         {{end}}
 
                         {{if $cert.SANs}}
                         <div class="detail-item">
                             <div class="detail-label">Subject Alternative Names ({{len $cert.SANs}})</div>
-                            <div class="san-container">
-                                {{range $cert.SANs}}
-                                <span class="san-item">{{.}}</span>
-                                {{end}}
+                            <div class="san-wrap">
+                                <div class="san-list">
+                                    {{range $cert.SANs}}
+                                    <span class="san-pill">{{.}}</span>
+                                    {{end}}
+                                </div>
                             </div>
                         </div>
                         {{end}}
 
-                        <div class="detail-grid-2">
+                        <div class="detail-grid">
                             {{if $cert.SKI}}
                             <div class="detail-item">
                                 <div class="detail-label">Subject Key Identifier</div>
-                                <div class="detail-value-box mono">{{$cert.SKI}}</div>
+                                <div class="detail-box detail-box-mono">{{$cert.SKI}}</div>
                             </div>
                             {{end}}
                             {{if $cert.AKI}}
                             <div class="detail-item">
                                 <div class="detail-label">Authority Key Identifier</div>
-                                <div class="detail-value-box mono">{{$cert.AKI}}</div>
+                                <div class="detail-box detail-box-mono">{{$cert.AKI}}</div>
                             </div>
                             {{end}}
                         </div>
 
                         <div class="detail-item">
                             <div class="detail-label">Certificate Hash (SHA-256)</div>
-                            <div class="detail-value-box mono">{{$cert.HashHex}}</div>
+                            <div class="detail-box detail-box-mono">{{$cert.HashHex}}</div>
                         </div>
                     </div>
                 </div>

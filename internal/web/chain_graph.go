@@ -159,7 +159,7 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		}
 		b.lines = append(b.lines,
 			"end",
-			"style tlsChain fill:#0f172a,stroke:#64748b,stroke-width:1px,stroke-dasharray:4 3;",
+			"style tlsChain fill:transparent,stroke:#64748b,stroke-width:1px,stroke-dasharray:4 3;",
 		)
 	}
 
@@ -172,10 +172,10 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 	}
 
 	b.lines = append(b.lines,
-		"classDef leaf fill:#3d2a12,stroke:#f97316,stroke-width:2px,color:#f8fafc;",
-		"classDef intermediate fill:#102a47,stroke:#60a5fa,stroke-width:2px,color:#f8fafc;",
-		"classDef root fill:#123524,stroke:#22c55e,stroke-width:2px,color:#f8fafc;",
-		"classDef missing fill:#3b1212,stroke:#ef4444,stroke-width:2px,stroke-dasharray:5 3,color:#f8fafc;",
+		"classDef leaf stroke-width:2px;",
+		"classDef intermediate stroke-width:2px;",
+		"classDef root stroke-width:2px;",
+		"classDef missing stroke-width:2px,stroke-dasharray:5 3;",
 		"classDef interactive cursor:pointer;",
 	)
 
