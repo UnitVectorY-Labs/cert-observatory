@@ -100,12 +100,20 @@ func New(cfg *Config, repo Repository, crawler Crawler) (*Server, error) {
 		logger = slog.Default()
 	}
 
+	assetVersions, err := buildAssetVersions(staticFS, versionedAssetPaths)
+	if err != nil {
+		return nil, fmt.Errorf("build asset versions: %w", err)
+	}
+
 	// Define template functions
 	funcMap := template.FuncMap{
 		// trustedHTML converts a string to template.HTML. Only use with trusted,
 		// developer-controlled content (e.g., RFC links in reserved domain errors).
 		"trustedHTML": func(s string) template.HTML {
 			return template.HTML(s)
+		},
+		"assetURL": func(path string) string {
+			return assetURL(path, assetVersions)
 		},
 	}
 
