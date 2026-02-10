@@ -443,7 +443,6 @@ a {
 
 .trust-path-mermaid svg {
   display: block;
-  max-width: 100%;
   height: auto;
   margin-left: auto;
   margin-right: auto;
@@ -546,5 +545,8 @@ a {
 @media (max-width: 600px) {
   .trust-path-mermaid .node .label {
     font-size: 0.75rem;
+  }
+  .trust-path-mermaid svg {
+    max-width: 100%;
   }
 }
