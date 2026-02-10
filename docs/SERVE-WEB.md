@@ -24,6 +24,7 @@ Features:
 - Two-pane layout with chain overview and certificate details
 - Cached results with optional force refresh
 - Rate limiting to prevent abuse
+- Tailwind CSS-based styling with committed compiled assets
 
 ## Options
 
@@ -56,6 +57,20 @@ cert-observatory serve-web --listen :3000
 # With database configuration
 cert-observatory serve-web --db-host db.example.com --db-user certuser
 ```
+
+## Frontend Asset Workflow
+
+The web stylesheet is generated with the standalone Tailwind CLI and checked into source control:
+
+```bash
+# Build CSS once
+just tailwind
+```
+
+Generated output: `internal/web/static/css/style.css`  
+Tailwind source input: `internal/web/tailwind.css`
+
+`go build` does not require Tailwind to run when compiled CSS is already present.
 
 ## Rate Limiting
 

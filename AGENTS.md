@@ -6,9 +6,16 @@ This is a Go application that provides multiple pieces of functionality through 
 - Docker for containerization
 - PostgreSQL for database storage
 - HTMX for dynamic web components
-- No additional CSS or JavaScript frameworks beyond HTMX (radical simplicity as design philosophy)
+- Tailwind CSS CLI for build-time stylesheet generation only (compiled CSS is committed and embedded)
+- No additional JavaScript frameworks beyond HTMX (radical simplicity as design philosophy)
 
 Minimize the use of external dependencies relying on the Go standard library as much as possible.
+
+Tailwind is used for CSS on this project, but not as a javascript framework, the Tailwind CLI is used directly to compile the CSS into a single file that is committed to the repository and embedded in the binary. The use of Tailwind is purely for CSS utility classes and does not involve any JavaScript or runtime dependencies.
+
+```
+tailwindcss -i ./internal/web/tailwind.css -o ./internal/web/static/css/style.css
+```
 
 Always include the content such as HTML templates, CSS, and JavaScript as well as the database migrations within the single binary using Go's `embed` package allowing the single binary to be used without any additional files.
 
