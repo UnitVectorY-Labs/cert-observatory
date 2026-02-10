@@ -271,7 +271,7 @@ a {
 }
 
 .graph-center {
-  @apply flex min-w-max justify-center;
+  @apply flex min-w-full justify-center;
 }
 
 .selected-heading {
@@ -438,18 +438,23 @@ a {
 }
 
 .trust-path-mermaid {
-  width: max-content;
+  width: min(100%, 56rem);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .trust-path-mermaid svg {
   display: block;
+  width: 100%;
+  max-width: 100%;
   height: auto;
   margin-left: auto;
   margin-right: auto;
 }
 
 .trust-path-mermaid .mermaid {
-  display: inline-block;
+  display: block;
+  width: 100%;
   text-align: center;
 }
 
@@ -545,8 +550,5 @@ a {
 @media (max-width: 600px) {
   .trust-path-mermaid .node .label {
     font-size: 0.75rem;
-  }
-  .trust-path-mermaid svg {
-    max-width: 100%;
   }
 }
