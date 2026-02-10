@@ -119,6 +119,14 @@ func TestHandleIndex(t *testing.T) {
 	if !strings.Contains(body, "UnitVectorY Labs") {
 		t.Error("Expected page to contain footer with UnitVectorY Labs")
 	}
+
+	if !strings.Contains(body, "/static/css/style.css?v=") {
+		t.Error("Expected stylesheet URL to include cache-busting version")
+	}
+
+	if !strings.Contains(body, "/static/js/script.js?v=") {
+		t.Error("Expected script URL to include cache-busting version")
+	}
 }
 
 func TestHandleInspect_ValidDomain(t *testing.T) {
