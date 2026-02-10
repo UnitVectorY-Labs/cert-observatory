@@ -29,10 +29,10 @@
                     <h1 class="brand-title">🔐 Cert Observatory</h1>
                     <p class="brand-subtitle">Retrieve and inspect TLS certificate chains for any domain.</p>
                 </div>
-                <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Switch to light mode" aria-pressed="true">
-                    <svg data-theme-sun xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m16 0h1" /><path d="M12 3v1m0 16v1" /><path d="M5.6 5.6l.7 .7m11.4 11.4l.7 .7" /><path d="M5.6 18.4l.7 -.7m11.4 -11.4l.7 -.7" /></svg>
-                    <svg data-theme-moon xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 .007a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
-                    <span data-theme-label class="theme-toggle-label">Light mode</span>
+                <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
+                    <svg data-theme-sun xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m16 0h1" /><path d="M12 3v1m0 16v1" /><path d="M5.6 5.6l.7 .7m11.4 11.4l.7 .7" /><path d="M5.6 18.4l.7 -.7m11.4 -11.4l.7 -.7" /></svg>
+                    <svg data-theme-moon xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 dark:hidden"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 .007a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
+                    <span data-theme-label class="theme-toggle-label">Toggle theme</span>
                 </button>
             </div>
         </div>
@@ -153,10 +153,6 @@
             if (labelEl) {
                 labelEl.textContent = isDark ? 'Light mode' : 'Dark mode';
             }
-            if (sunIcon && moonIcon) {
-                sunIcon.classList.toggle('hidden', !isDark);
-                moonIcon.classList.toggle('hidden', isDark);
-            }
             btn.setAttribute('aria-pressed', String(isDark));
             btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
         }
@@ -202,12 +198,17 @@
             renderTrustPathMermaid(evt.target);
         });
 
-        document.addEventListener('DOMContentLoaded', function() {
+        // Initialize theme toggle immediately (script is at end of <body>)
+        (function() {
             var toggle = document.getElementById('theme-toggle');
             if (toggle) {
                 toggle.addEventListener('click', toggleTheme);
                 updateThemeToggleLabel(document.documentElement.classList.contains('dark'));
             }
+        })();
+
+        // Render mermaid after DOMContentLoaded for compatibility
+        document.addEventListener('DOMContentLoaded', function() {
             renderTrustPathMermaid(document);
         });
 
