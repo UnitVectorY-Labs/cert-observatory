@@ -11,11 +11,13 @@ This is a Go application that provides multiple pieces of functionality through 
 
 Minimize the use of external dependencies relying on the Go standard library as much as possible.
 
-Tailwind is used for CSS on this project, but not as a javascript framework, the Tailwind CLI is used directly to compile the CSS into a single file that is committed to the repository and embedded in the binary. The use of Tailwind is purely for CSS utility classes and does not involve any JavaScript or runtime dependencies.
+Tailwind is used for CSS on this project, but not as a JavaScript framework. The Tailwind CLI is used directly to compile the CSS into a single file that is committed to the repository and embedded in the binary. The use of Tailwind is purely for CSS utility classes and does not involve any JavaScript or runtime dependencies.
 
 ```
 tailwindcss -i ./internal/web/tailwind.css -o ./internal/web/static/css/style.css
 ```
+
+The icons used by this project are embedded SVGs taken from https://github.com/tabler/tabler-icons and are included as inline SVG in the HTML templates.
 
 Always include the content such as HTML templates, CSS, and JavaScript as well as the database migrations within the single binary using Go's `embed` package allowing the single binary to be used without any additional files.
 

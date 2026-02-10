@@ -1,4 +1,5 @@
-set shell := ["zsh", "-cu"]
+
+set dotenv-load := true
 
 default:
   @just --list
@@ -13,5 +14,4 @@ test:
   go test ./...
 
 serve:
-  if [[ -f .env ]]; then set -a; source .env; set +a; fi
   go run . serve-web
