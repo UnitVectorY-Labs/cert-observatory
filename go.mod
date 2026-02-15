@@ -1,6 +1,6 @@
 module github.com/UnitVectorY-Labs/cert-observatory
 
-go 1.25.7 // GOVERSION
+go 1.26.0 // GOVERSION
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
