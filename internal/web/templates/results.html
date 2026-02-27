@@ -118,6 +118,14 @@
                                 <div class="detail-label">Public Key</div>
                                 <div class="detail-box">{{$gc.PublicKeyInfo}}</div>
                             </div>
+                            {{if $gc.KeyLength}}
+                            <div class="detail-item">
+                                <div class="detail-label">Key Length</div>
+                                <div class="detail-box">{{$gc.KeyLength}}</div>
+                            </div>
+                            {{end}}
+                        </div>
+                        <div class="detail-grid">
                             {{if or $gc.IsCA $gc.HasPathLenConstraint}}
                             <div class="detail-item">
                                 <div class="detail-label">Basic Constraints</div>
@@ -243,6 +251,15 @@
                                 <div class="detail-label">Public Key</div>
                                 <div class="detail-box">{{$cert.PublicKeyInfo}}</div>
                             </div>
+                            {{if $cert.KeyLength}}
+                            <div class="detail-item">
+                                <div class="detail-label">Key Length</div>
+                                <div class="detail-box">{{$cert.KeyLength}}</div>
+                            </div>
+                            {{end}}
+                        </div>
+
+                        <div class="detail-grid">
                             {{if or $cert.IsCA $cert.HasPathLenConstraint}}
                             <div class="detail-item">
                                 <div class="detail-label">Basic Constraints</div>
