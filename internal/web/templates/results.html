@@ -118,13 +118,21 @@
                                 <div class="detail-label">Public Key</div>
                                 <div class="detail-box">{{$gc.PublicKeyInfo}}</div>
                             </div>
-                            {{if or $gc.IsCA $gc.HasPathLenConstraint}}
+                            {{if $gc.KeyLength}}
+                            <div class="detail-item">
+                                <div class="detail-label">Key Length</div>
+                                <div class="detail-box">{{$gc.KeyLength}}</div>
+                            </div>
+                            {{end}}
+                        </div>
+                        {{if or $gc.IsCA $gc.HasPathLenConstraint}}
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Basic Constraints</div>
                                 <div class="detail-box">CA: {{if $gc.IsCA}}Yes{{else}}No{{end}}{{if $gc.HasPathLenConstraint}}, Path Length: {{$gc.PathLenConstraint}}{{end}}</div>
                             </div>
-                            {{end}}
                         </div>
+                        {{end}}
                         {{if $gc.KeyUsage}}
                         <div class="detail-item">
                             <div class="detail-label">Key Usage</div>
@@ -243,13 +251,22 @@
                                 <div class="detail-label">Public Key</div>
                                 <div class="detail-box">{{$cert.PublicKeyInfo}}</div>
                             </div>
-                            {{if or $cert.IsCA $cert.HasPathLenConstraint}}
+                            {{if $cert.KeyLength}}
+                            <div class="detail-item">
+                                <div class="detail-label">Key Length</div>
+                                <div class="detail-box">{{$cert.KeyLength}}</div>
+                            </div>
+                            {{end}}
+                        </div>
+
+                        {{if or $cert.IsCA $cert.HasPathLenConstraint}}
+                        <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Basic Constraints</div>
                                 <div class="detail-box">CA: {{if $cert.IsCA}}Yes{{else}}No{{end}}{{if $cert.HasPathLenConstraint}}, Path Length: {{$cert.PathLenConstraint}}{{end}}</div>
                             </div>
-                            {{end}}
                         </div>
+                        {{end}}
 
                         {{if $cert.KeyUsage}}
                         <div class="detail-item">
