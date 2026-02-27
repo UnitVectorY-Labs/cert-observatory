@@ -106,7 +106,7 @@
                         <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Serial Number</div>
-                                <div class="detail-box detail-box-mono">{{$gc.SerialNumber}}</div>
+                                <div class="detail-box detail-box-mono hex-value">{{$gc.SerialNumber}}</div>
                             </div>
                             <div class="detail-item">
                                 <div class="detail-label">Signature Algorithm</div>
@@ -161,20 +161,28 @@
                             {{if $gc.SKI}}
                             <div class="detail-item">
                                 <div class="detail-label">Subject Key Identifier</div>
-                                <div class="detail-box detail-box-mono">{{$gc.SKI}}</div>
+                                <div class="detail-box detail-box-mono hex-value">{{$gc.SKI}}</div>
                             </div>
                             {{end}}
                             {{if $gc.AKI}}
                             <div class="detail-item">
                                 <div class="detail-label">Authority Key Identifier</div>
-                                <div class="detail-box detail-box-mono">{{$gc.AKI}}</div>
+                                <div class="detail-box detail-box-mono hex-value">{{$gc.AKI}}</div>
                             </div>
                             {{end}}
                         </div>
+                        {{if $gc.SHA256Fingerprint}}
                         <div class="detail-item">
-                            <div class="detail-label">Certificate Hash (SHA-256)</div>
-                            <div class="detail-box detail-box-mono">{{$gc.HashHex}}</div>
+                            <div class="detail-label">SHA-256 Fingerprint</div>
+                            <div class="detail-box detail-box-mono hex-value">{{$gc.SHA256Fingerprint}}</div>
                         </div>
+                        {{end}}
+                        {{if $gc.SHA1Fingerprint}}
+                        <div class="detail-item">
+                            <div class="detail-label">SHA-1 Fingerprint</div>
+                            <div class="detail-box detail-box-mono hex-value">{{$gc.SHA1Fingerprint}}</div>
+                        </div>
+                        {{end}}
                     </div>
                 </div>
             </div>
@@ -238,7 +246,7 @@
                         <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Serial Number</div>
-                                <div class="detail-box detail-box-mono">{{$cert.SerialNumber}}</div>
+                                <div class="detail-box detail-box-mono hex-value">{{$cert.SerialNumber}}</div>
                             </div>
                             <div class="detail-item">
                                 <div class="detail-label">Signature Algorithm</div>
@@ -299,21 +307,29 @@
                             {{if $cert.SKI}}
                             <div class="detail-item">
                                 <div class="detail-label">Subject Key Identifier</div>
-                                <div class="detail-box detail-box-mono">{{$cert.SKI}}</div>
+                                <div class="detail-box detail-box-mono hex-value">{{$cert.SKI}}</div>
                             </div>
                             {{end}}
                             {{if $cert.AKI}}
                             <div class="detail-item">
                                 <div class="detail-label">Authority Key Identifier</div>
-                                <div class="detail-box detail-box-mono">{{$cert.AKI}}</div>
+                                <div class="detail-box detail-box-mono hex-value">{{$cert.AKI}}</div>
                             </div>
                             {{end}}
                         </div>
 
+                        {{if $cert.SHA256Fingerprint}}
                         <div class="detail-item">
-                            <div class="detail-label">Certificate Hash (SHA-256)</div>
-                            <div class="detail-box detail-box-mono">{{$cert.HashHex}}</div>
+                            <div class="detail-label">SHA-256 Fingerprint</div>
+                            <div class="detail-box detail-box-mono hex-value">{{$cert.SHA256Fingerprint}}</div>
                         </div>
+                        {{end}}
+                        {{if $cert.SHA1Fingerprint}}
+                        <div class="detail-item">
+                            <div class="detail-label">SHA-1 Fingerprint</div>
+                            <div class="detail-box detail-box-mono hex-value">{{$cert.SHA1Fingerprint}}</div>
+                        </div>
+                        {{end}}
                     </div>
                 </div>
             </div>

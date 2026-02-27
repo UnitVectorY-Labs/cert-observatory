@@ -4,6 +4,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
@@ -77,6 +79,8 @@ type CertViewData struct {
 	ExtKeyUsage          string
 	SKI                  string
 	AKI                  string
+	SHA1Fingerprint      string
+	SHA256Fingerprint    string
 	PossibleIssuers      []string
 	// CertLabel is the human-readable label for this certificate's role in the chain
 	CertLabel string
@@ -164,6 +168,14 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 
 	// Extended Key Usage
 	view.ExtKeyUsage = formatExtKeyUsage(cert.ExtKeyUsage)
+
+	// Fingerprints computed from raw DER bytes
+	if len(cert.Raw) > 0 {
+		sha1Sum := sha1.Sum(cert.Raw)
+		view.SHA1Fingerprint = formatHexBytes(sha1Sum[:])
+		sha256Sum := sha256.Sum256(cert.Raw)
+		view.SHA256Fingerprint = formatHexBytes(sha256Sum[:])
+	}
 }
 
 func extractCN(dn string) string {
@@ -180,7 +192,7 @@ func extractCN(dn string) string {
 func formatHexBytes(b []byte) string {
 	hex := make([]string, len(b))
 	for i, v := range b {
-		hex[i] = fmt.Sprintf("%02X", v)
+		hex[i] = fmt.Sprintf("%02x", v)
 	}
 	return strings.Join(hex, ":")
 }
