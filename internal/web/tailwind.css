@@ -76,6 +76,10 @@ a {
   @apply flex items-start justify-between gap-4 py-5;
 }
 
+.header-controls {
+  @apply ml-auto flex shrink-0 items-center gap-2 sm:gap-3;
+}
+
 .brand-title {
   @apply mb-1 text-2xl font-bold tracking-tight text-orange-600;
   @apply dark:text-orange-400;
@@ -172,6 +176,51 @@ a {
 .empty-card {
   @apply rounded-2xl border border-dashed border-slate-300 bg-white/55 px-4 py-14 text-center text-slate-500;
   @apply dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-400;
+}
+
+.settings-card {
+  @apply mt-8 rounded-2xl border border-slate-200/80 bg-white/85 p-5 shadow-lg shadow-slate-200/70 backdrop-blur;
+  @apply dark:border-slate-700/70 dark:bg-slate-900/75 dark:shadow-black/35;
+}
+
+.settings-title {
+  @apply text-base font-semibold text-orange-600 dark:text-orange-400;
+}
+
+.settings-summary {
+  @apply flex cursor-pointer list-none items-center justify-between gap-3;
+}
+
+.settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-caret {
+  @apply h-5 w-5 text-slate-500 transition-transform duration-150 dark:text-slate-300;
+}
+
+.settings-card[open] .settings-caret {
+  transform: rotate(180deg);
+}
+
+.settings-body {
+  @apply mt-3;
+}
+
+.settings-intro {
+  @apply text-xs text-slate-500 dark:text-slate-400;
+}
+
+.settings-item {
+  @apply mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+}
+
+.settings-item-title {
+  @apply text-sm font-semibold text-slate-800 dark:text-slate-100;
+}
+
+.settings-item-copy {
+  @apply mt-1 text-xs text-slate-600 dark:text-slate-300;
 }
 
 .footer-shell {

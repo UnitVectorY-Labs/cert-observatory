@@ -177,6 +177,71 @@ function selectTrustPathCert(nodeId, certIdx) {
     }
 }
 
+function hexToCompact(str) {
+    return str.replace(/:/g, "").toUpperCase();
+}
+
+function hexToColon(str) {
+    var clean = str.replace(/:/g, "").toLowerCase();
+    var pairs = [];
+    for (var i = 0; i < clean.length; i += 2) {
+        pairs.push(clean.substring(i, i + 2));
+    }
+    return pairs.join(":");
+}
+
+function getHexFormat() {
+    try {
+        return localStorage.getItem("hexFormat") || "colon";
+    } catch (err) {
+        return "colon";
+    }
+}
+
+function setHexFormat(fmt) {
+    try {
+        localStorage.setItem("hexFormat", fmt);
+    } catch (err) {
+        // Ignore storage failures.
+    }
+}
+
+function applyHexFormat(scope) {
+    var root = scope || document;
+    var fmt = getHexFormat();
+    var elements = root.querySelectorAll ? root.querySelectorAll(".hex-value") : [];
+    for (var i = 0; i < elements.length; i++) {
+        var el = elements[i];
+        if (!el.dataset.hexColon) {
+            el.dataset.hexColon = el.textContent.trim();
+        }
+        if (fmt === "compact") {
+            el.textContent = hexToCompact(el.dataset.hexColon);
+        } else {
+            el.textContent = el.dataset.hexColon;
+        }
+    }
+    updateHexToggleLabel(fmt);
+}
+
+function updateHexToggleLabel(fmt) {
+    var label = document.getElementById("hex-toggle-label");
+    if (label) {
+        label.textContent = fmt === "compact" ? "AABB" : "aa:bb";
+    }
+    var btn = document.getElementById("hex-toggle");
+    if (btn) {
+        btn.setAttribute("aria-label", fmt === "compact" ? "Switch to colon hex format" : "Switch to compact hex format");
+    }
+}
+
+function toggleHexFormat() {
+    var current = getHexFormat();
+    var next = current === "compact" ? "colon" : "compact";
+    setHexFormat(next);
+    applyHexFormat(document);
+}
+
 function initializePage() {
     if (window.mermaid) {
         mermaid.initialize({
@@ -190,6 +255,12 @@ function initializePage() {
         toggle.addEventListener("click", toggleTheme);
         updateThemeToggleLabel(document.documentElement.classList.contains("dark"));
     }
+
+    var hexBtn = document.getElementById("hex-toggle");
+    if (hexBtn) {
+        hexBtn.addEventListener("click", toggleHexFormat);
+    }
+    applyHexFormat(document);
 
     document.addEventListener("htmx:beforeRequest", function (evt) {
         if (evt.target && evt.target.id === "inspect-form") {
@@ -207,6 +278,7 @@ function initializePage() {
 
         document.body.addEventListener("htmx:afterSwap", function (evt) {
             renderTrustPathMermaid(evt.target);
+            applyHexFormat(evt.target);
         });
     }
 

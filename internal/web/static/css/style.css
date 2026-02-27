@@ -1,4 +1,4 @@
-/*! tailwindcss v4.1.18 | MIT License | https://tailwindcss.com */
+/*! tailwindcss v4.2.1 | MIT License | https://tailwindcss.com */
 @layer properties;
 @layer theme, base, components, utilities;
 @layer theme {
@@ -231,6 +231,12 @@
   .static {
     position: static;
   }
+  .start {
+    inset-inline-start: var(--spacing);
+  }
+  .end {
+    inset-inline-end: var(--spacing);
+  }
   .container {
     width: 100%;
     @media (width >= 40rem) {
@@ -312,6 +318,9 @@
   .shrink-0 {
     flex-shrink: 0;
   }
+  .transform {
+    transform: var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);
+  }
   .animate-spin {
     animation: var(--animate-spin);
   }
@@ -381,10 +390,6 @@
   }
   .opacity-50 {
     opacity: 50%;
-  }
-  .outline {
-    outline-style: var(--tw-outline-style);
-    outline-width: 1px;
   }
   .filter {
     filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
@@ -551,6 +556,16 @@ a {
   justify-content: space-between;
   gap: calc(var(--spacing) * 4);
   padding-block: calc(var(--spacing) * 5);
+}
+.header-controls {
+  margin-left: auto;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  @media (width >= 40rem) {
+    gap: calc(var(--spacing) * 3);
+  }
 }
 .brand-title {
   margin-bottom: calc(var(--spacing) * 1);
@@ -993,6 +1008,130 @@ a {
   }
   &:where(.dark, .dark *) {
     color: var(--color-slate-400);
+  }
+}
+.settings-card {
+  margin-top: calc(var(--spacing) * 8);
+  border-radius: var(--radius-2xl);
+  border-style: var(--tw-border-style);
+  border-width: 1px;
+  border-color: color-mix(in srgb, oklch(92.9% 0.013 255.508) 80%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    border-color: color-mix(in oklab, var(--color-slate-200) 80%, transparent);
+  }
+  background-color: color-mix(in srgb, #fff 85%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    background-color: color-mix(in oklab, var(--color-white) 85%, transparent);
+  }
+  padding: calc(var(--spacing) * 5);
+  --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 4px 6px -4px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  --tw-shadow-color: color-mix(in srgb, oklch(92.9% 0.013 255.508) 70%, transparent);
+  @supports (color: color-mix(in lab, red, red)) {
+    --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-slate-200) 70%, transparent) var(--tw-shadow-alpha), transparent);
+  }
+  --tw-backdrop-blur: blur(8px);
+  -webkit-backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
+  backdrop-filter: var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);
+  &:where(.dark, .dark *) {
+    border-color: color-mix(in srgb, oklch(37.2% 0.044 257.287) 70%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-slate-700) 70%, transparent);
+    }
+  }
+  &:where(.dark, .dark *) {
+    background-color: color-mix(in srgb, oklch(20.8% 0.042 265.755) 75%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-slate-900) 75%, transparent);
+    }
+  }
+  &:where(.dark, .dark *) {
+    --tw-shadow-color: color-mix(in srgb, #000 35%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-black) 35%, transparent) var(--tw-shadow-alpha), transparent);
+    }
+  }
+}
+.settings-title {
+  font-size: var(--text-base);
+  line-height: var(--tw-leading, var(--text-base--line-height));
+  --tw-font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-orange-600);
+  &:where(.dark, .dark *) {
+    color: var(--color-orange-400);
+  }
+}
+.settings-summary {
+  display: flex;
+  cursor: pointer;
+  list-style-type: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--spacing) * 3);
+}
+.settings-summary::-webkit-details-marker {
+  display: none;
+}
+.settings-caret {
+  height: calc(var(--spacing) * 5);
+  width: calc(var(--spacing) * 5);
+  color: var(--color-slate-500);
+  transition-property: transform, translate, scale, rotate;
+  transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+  transition-duration: var(--tw-duration, var(--default-transition-duration));
+  --tw-duration: 150ms;
+  transition-duration: 150ms;
+  &:where(.dark, .dark *) {
+    color: var(--color-slate-300);
+  }
+}
+.settings-card[open] .settings-caret {
+  transform: rotate(180deg);
+}
+.settings-body {
+  margin-top: calc(var(--spacing) * 3);
+}
+.settings-intro {
+  font-size: var(--text-xs);
+  line-height: var(--tw-leading, var(--text-xs--line-height));
+  color: var(--color-slate-500);
+  &:where(.dark, .dark *) {
+    color: var(--color-slate-400);
+  }
+}
+.settings-item {
+  margin-top: calc(var(--spacing) * 4);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 3);
+  @media (width >= 40rem) {
+    flex-direction: row;
+  }
+  @media (width >= 40rem) {
+    align-items: center;
+  }
+  @media (width >= 40rem) {
+    justify-content: space-between;
+  }
+}
+.settings-item-title {
+  font-size: var(--text-sm);
+  line-height: var(--tw-leading, var(--text-sm--line-height));
+  --tw-font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-slate-800);
+  &:where(.dark, .dark *) {
+    color: var(--color-slate-100);
+  }
+}
+.settings-item-copy {
+  margin-top: calc(var(--spacing) * 1);
+  font-size: var(--text-xs);
+  line-height: var(--tw-leading, var(--text-xs--line-height));
+  color: var(--color-slate-600);
+  &:where(.dark, .dark *) {
+    color: var(--color-slate-300);
   }
 }
 .footer-shell {
@@ -1802,17 +1941,32 @@ a {
     font-size: 0.75rem;
   }
 }
+@property --tw-rotate-x {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-rotate-y {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-rotate-z {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-skew-x {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-skew-y {
+  syntax: "*";
+  inherits: false;
+}
 @property --tw-space-y-reverse {
   syntax: "*";
   inherits: false;
   initial-value: 0;
 }
 @property --tw-border-style {
-  syntax: "*";
-  inherits: false;
-  initial-value: solid;
-}
-@property --tw-outline-style {
   syntax: "*";
   inherits: false;
   initial-value: solid;
@@ -2037,9 +2191,13 @@ a {
 @layer properties {
   @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
     *, ::before, ::after, ::backdrop {
+      --tw-rotate-x: initial;
+      --tw-rotate-y: initial;
+      --tw-rotate-z: initial;
+      --tw-skew-x: initial;
+      --tw-skew-y: initial;
       --tw-space-y-reverse: 0;
       --tw-border-style: solid;
-      --tw-outline-style: solid;
       --tw-blur: initial;
       --tw-brightness: initial;
       --tw-contrast: initial;
