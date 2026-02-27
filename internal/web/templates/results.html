@@ -125,14 +125,14 @@
                             </div>
                             {{end}}
                         </div>
+                        {{if or $gc.IsCA $gc.HasPathLenConstraint}}
                         <div class="detail-grid">
-                            {{if or $gc.IsCA $gc.HasPathLenConstraint}}
                             <div class="detail-item">
                                 <div class="detail-label">Basic Constraints</div>
                                 <div class="detail-box">CA: {{if $gc.IsCA}}Yes{{else}}No{{end}}{{if $gc.HasPathLenConstraint}}, Path Length: {{$gc.PathLenConstraint}}{{end}}</div>
                             </div>
-                            {{end}}
                         </div>
+                        {{end}}
                         {{if $gc.KeyUsage}}
                         <div class="detail-item">
                             <div class="detail-label">Key Usage</div>
@@ -259,14 +259,14 @@
                             {{end}}
                         </div>
 
+                        {{if or $cert.IsCA $cert.HasPathLenConstraint}}
                         <div class="detail-grid">
-                            {{if or $cert.IsCA $cert.HasPathLenConstraint}}
                             <div class="detail-item">
                                 <div class="detail-label">Basic Constraints</div>
                                 <div class="detail-box">CA: {{if $cert.IsCA}}Yes{{else}}No{{end}}{{if $cert.HasPathLenConstraint}}, Path Length: {{$cert.PathLenConstraint}}{{end}}</div>
                             </div>
-                            {{end}}
                         </div>
+                        {{end}}
 
                         {{if $cert.KeyUsage}}
                         <div class="detail-item">
