@@ -287,3 +287,8 @@ $RECYCLE.BIN/
 
 # Application binary
 cert-observatory
+
+# Node.js (Tailwind CSS build tooling only)
+node_modules/
+package.json
+package-lock.json
