@@ -106,7 +106,7 @@
                         <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Validity Period</div>
-                                <div class="detail-value detail-muted">{{$gc.ValidityDays}} days</div>
+                                <div class="detail-value detail-muted">{{$gc.ValidityPeriod}}</div>
                             </div>
                             <div class="detail-item">
                                 {{if $gc.IsExpired}}
@@ -264,7 +264,7 @@
                         <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Validity Period</div>
-                                <div class="detail-value detail-muted">{{$cert.ValidityDays}} days</div>
+                                <div class="detail-value detail-muted">{{$cert.ValidityPeriod}}</div>
                             </div>
                             <div class="detail-item">
                                 {{if $cert.IsExpired}}
