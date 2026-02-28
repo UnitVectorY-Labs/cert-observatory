@@ -177,68 +177,105 @@ function selectTrustPathCert(nodeId, certIdx) {
     }
 }
 
-function hexToCompact(str) {
-    return str.replace(/:/g, "").toUpperCase();
-}
-
-function hexToColon(str) {
-    var clean = str.replace(/:/g, "").toLowerCase();
-    var pairs = [];
-    for (var i = 0; i < clean.length; i += 2) {
-        pairs.push(clean.substring(i, i + 2));
-    }
-    return pairs.join(":");
-}
-
-function getHexFormat() {
+function getHexSeparator() {
     try {
-        return localStorage.getItem("hexFormat") || "colon";
+        return localStorage.getItem("hexSeparator") || "colon";
     } catch (err) {
         return "colon";
     }
 }
 
-function setHexFormat(fmt) {
+function setHexSeparator(value) {
     try {
-        localStorage.setItem("hexFormat", fmt);
+        localStorage.setItem("hexSeparator", value);
     } catch (err) {
         // Ignore storage failures.
     }
 }
 
+function getHexCase() {
+    try {
+        return localStorage.getItem("hexCase") || "lower";
+    } catch (err) {
+        return "lower";
+    }
+}
+
+function setHexCase(value) {
+    try {
+        localStorage.setItem("hexCase", value);
+    } catch (err) {
+        // Ignore storage failures.
+    }
+}
+
+function formatHexValue(colonStr, separator, hexCase) {
+    var clean = colonStr.replace(/:/g, "").toLowerCase();
+    var result;
+    if (separator === "colon") {
+        var pairs = [];
+        for (var i = 0; i < clean.length; i += 2) {
+            pairs.push(clean.substring(i, i + 2));
+        }
+        result = pairs.join(":");
+    } else {
+        result = clean;
+    }
+    if (hexCase === "upper") {
+        result = result.toUpperCase();
+    }
+    return result;
+}
+
 function applyHexFormat(scope) {
     var root = scope || document;
-    var fmt = getHexFormat();
+    var separator = getHexSeparator();
+    var hexCase = getHexCase();
     var elements = root.querySelectorAll ? root.querySelectorAll(".hex-value") : [];
     for (var i = 0; i < elements.length; i++) {
         var el = elements[i];
         if (!el.dataset.hexColon) {
             el.dataset.hexColon = el.textContent.trim();
         }
-        if (fmt === "compact") {
-            el.textContent = hexToCompact(el.dataset.hexColon);
-        } else {
-            el.textContent = el.dataset.hexColon;
-        }
+        el.textContent = formatHexValue(el.dataset.hexColon, separator, hexCase);
     }
-    updateHexToggleLabel(fmt);
+    updateHexSeparatorLabel(separator);
+    updateHexCaseLabel(hexCase);
 }
 
-function updateHexToggleLabel(fmt) {
-    var label = document.getElementById("hex-toggle-label");
+function updateHexSeparatorLabel(separator) {
+    var label = document.getElementById("hex-separator-label");
     if (label) {
-        label.textContent = fmt === "compact" ? "AABB" : "aa:bb";
+        label.textContent = separator === "colon" ? "aa:bb" : "aabb";
     }
-    var btn = document.getElementById("hex-toggle");
+    var btn = document.getElementById("hex-separator-toggle");
     if (btn) {
-        btn.setAttribute("aria-label", fmt === "compact" ? "Switch to colon hex format" : "Switch to compact hex format");
+        btn.setAttribute("aria-label", separator === "colon" ? "Switch to compact hex format" : "Switch to colon-separated hex format");
     }
 }
 
-function toggleHexFormat() {
-    var current = getHexFormat();
-    var next = current === "compact" ? "colon" : "compact";
-    setHexFormat(next);
+function updateHexCaseLabel(hexCase) {
+    var label = document.getElementById("hex-case-label");
+    if (label) {
+        label.textContent = hexCase === "lower" ? "aa" : "AA";
+    }
+    var btn = document.getElementById("hex-case-toggle");
+    if (btn) {
+        btn.setAttribute("aria-label", hexCase === "lower" ? "Switch to uppercase hex" : "Switch to lowercase hex");
+    }
+}
+
+function toggleHexSeparator() {
+    var current = getHexSeparator();
+    var next = current === "colon" ? "none" : "colon";
+    setHexSeparator(next);
+    applyHexFormat(document);
+}
+
+function toggleHexCase() {
+    var current = getHexCase();
+    var next = current === "lower" ? "upper" : "lower";
+    setHexCase(next);
     applyHexFormat(document);
 }
 
@@ -256,9 +293,13 @@ function initializePage() {
         updateThemeToggleLabel(document.documentElement.classList.contains("dark"));
     }
 
-    var hexBtn = document.getElementById("hex-toggle");
-    if (hexBtn) {
-        hexBtn.addEventListener("click", toggleHexFormat);
+    var hexSepBtn = document.getElementById("hex-separator-toggle");
+    if (hexSepBtn) {
+        hexSepBtn.addEventListener("click", toggleHexSeparator);
+    }
+    var hexCaseBtn = document.getElementById("hex-case-toggle");
+    if (hexCaseBtn) {
+        hexCaseBtn.addEventListener("click", toggleHexCase);
     }
     applyHexFormat(document);
 
