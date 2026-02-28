@@ -67,6 +67,7 @@ type CertViewData struct {
 	IsExpired            bool
 	IsNotYetValid        bool
 	ValidityDays         int
+	ValidityPeriod       string
 	ExpiresIn            string
 	IsCA                 bool
 	IsSelfSigned         bool
@@ -119,6 +120,7 @@ func certToViewData(cert *CertificateResult) *CertViewData {
 		IsExpired:          now.After(cert.NotAfter),
 		IsNotYetValid:      now.Before(cert.NotBefore),
 		ValidityDays:       int(cert.NotAfter.Sub(cert.NotBefore).Hours() / 24),
+		ValidityPeriod:     formatCertDuration(cert.NotAfter.Sub(cert.NotBefore)),
 		ExpiresIn:          formatCertDuration(cert.NotAfter.Sub(now)),
 	}
 

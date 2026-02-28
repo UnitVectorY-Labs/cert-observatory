@@ -285,6 +285,12 @@ func TestCertToViewData_ValidityFields(t *testing.T) {
 	if view.ValidityDays != 90 {
 		t.Errorf("certToViewData ValidityDays = %d, want 90", view.ValidityDays)
 	}
+	if view.ValidityPeriod == "" {
+		t.Error("certToViewData ValidityPeriod is empty")
+	}
+	if view.ValidityPeriod != "3 months" {
+		t.Errorf("certToViewData ValidityPeriod = %q, want %q", view.ValidityPeriod, "3 months")
+	}
 	if view.ExpiresIn == "" {
 		t.Error("certToViewData ExpiresIn is empty")
 	}
