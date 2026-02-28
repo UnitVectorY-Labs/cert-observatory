@@ -66,6 +66,8 @@ type CertViewData struct {
 	NotAfter             time.Time
 	IsExpired            bool
 	IsNotYetValid        bool
+	ValidityDays         int
+	ExpiresIn            string
 	IsCA                 bool
 	IsSelfSigned         bool
 	HasPathLenConstraint bool
@@ -105,6 +107,7 @@ type ResultsViewData struct {
 
 // certToViewData converts a CertificateResult to CertViewData.
 func certToViewData(cert *CertificateResult) *CertViewData {
+	now := time.Now()
 	view := &CertViewData{
 		HashHex:            hex.EncodeToString(cert.CertHash),
 		Position:           cert.Position,
@@ -113,8 +116,10 @@ func certToViewData(cert *CertificateResult) *CertViewData {
 		NotAfter:           cert.NotAfter,
 		NotBeforeFormatted: cert.NotBefore.Format("Jan 02, 2006 15:04 UTC"),
 		NotAfterFormatted:  cert.NotAfter.Format("Jan 02, 2006 15:04 UTC"),
-		IsExpired:          time.Now().After(cert.NotAfter),
-		IsNotYetValid:      time.Now().Before(cert.NotBefore),
+		IsExpired:          now.After(cert.NotAfter),
+		IsNotYetValid:      now.Before(cert.NotBefore),
+		ValidityDays:       int(cert.NotAfter.Sub(cert.NotBefore).Hours() / 24),
+		ExpiresIn:          formatCertDuration(cert.NotAfter.Sub(now)),
 	}
 
 	if len(cert.SKI) > 0 {
@@ -295,6 +300,55 @@ func formatExtKeyUsage(eku []x509.ExtKeyUsage) string {
 		}
 	}
 	return strings.Join(usages, ", ")
+}
+
+// formatCertDuration formats a duration for certificate context using an
+// appropriate combination of years, months, and days.
+func formatCertDuration(d time.Duration) string {
+	totalDays := int(d.Hours() / 24)
+	if totalDays < 0 {
+		totalDays = -totalDays
+	}
+	if totalDays == 0 {
+		return "less than a day"
+	}
+
+	years := totalDays / 365
+	remaining := totalDays % 365
+	months := remaining / 30
+	days := remaining % 30
+
+	var parts []string
+	if years > 0 {
+		if years == 1 {
+			parts = append(parts, "1 year")
+		} else {
+			parts = append(parts, fmt.Sprintf("%d years", years))
+		}
+	}
+	if months > 0 {
+		if months == 1 {
+			parts = append(parts, "1 month")
+		} else {
+			parts = append(parts, fmt.Sprintf("%d months", months))
+		}
+	}
+	if days > 0 && years == 0 {
+		if days == 1 {
+			parts = append(parts, "1 day")
+		} else {
+			parts = append(parts, fmt.Sprintf("%d days", days))
+		}
+	}
+
+	if len(parts) == 0 {
+		if totalDays == 1 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", totalDays)
+	}
+
+	return strings.Join(parts, ", ")
 }
 
 func parsePEM(pem string) (*x509.Certificate, error) {

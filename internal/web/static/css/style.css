@@ -1721,6 +1721,16 @@ a {
     color: var(--color-amber-400);
   }
 }
+.detail-muted {
+  font-size: var(--text-sm);
+  line-height: var(--tw-leading, var(--text-sm--line-height));
+  --tw-font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-slate-600);
+  &:where(.dark, .dark *) {
+    color: var(--color-slate-300);
+  }
+}
 .san-wrap {
   max-height: 100px;
   overflow-y: auto;

@@ -242,3 +242,74 @@ func TestFormatHexBytes_Lowercase(t *testing.T) {
 		t.Errorf("formatHexBytes = %q, want %q", result, expected)
 	}
 }
+
+func TestFormatCertDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{"less than a day", 12 * time.Hour, "less than a day"},
+		{"one day", 24 * time.Hour, "1 day"},
+		{"multiple days", 15 * 24 * time.Hour, "15 days"},
+		{"30 days", 30 * 24 * time.Hour, "1 month"},
+		{"60 days", 60 * 24 * time.Hour, "2 months"},
+		{"90 days", 90 * 24 * time.Hour, "3 months"},
+		{"45 days", 45 * 24 * time.Hour, "1 month, 15 days"},
+		{"365 days", 365 * 24 * time.Hour, "1 year"},
+		{"730 days", 730 * 24 * time.Hour, "2 years"},
+		{"400 days", 400 * 24 * time.Hour, "1 year, 1 month"},
+		{"negative less than a day", -12 * time.Hour, "less than a day"},
+		{"negative 90 days", -90 * 24 * time.Hour, "3 months"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatCertDuration(tt.duration)
+			if got != tt.expected {
+				t.Errorf("formatCertDuration(%v) = %q, want %q", tt.duration, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCertToViewData_ValidityFields(t *testing.T) {
+	now := time.Now()
+	result := &CertificateResult{
+		CertHash:  make([]byte, 32),
+		PEM:       "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n",
+		NotBefore: now.Add(-30 * 24 * time.Hour),
+		NotAfter:  now.Add(60 * 24 * time.Hour),
+	}
+
+	view := certToViewData(result)
+	if view.ValidityDays != 90 {
+		t.Errorf("certToViewData ValidityDays = %d, want 90", view.ValidityDays)
+	}
+	if view.ExpiresIn == "" {
+		t.Error("certToViewData ExpiresIn is empty")
+	}
+	if view.IsExpired {
+		t.Error("certToViewData IsExpired should be false")
+	}
+}
+
+func TestCertToViewData_ExpiredCert(t *testing.T) {
+	now := time.Now()
+	result := &CertificateResult{
+		CertHash:  make([]byte, 32),
+		PEM:       "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n",
+		NotBefore: now.Add(-90 * 24 * time.Hour),
+		NotAfter:  now.Add(-30 * 24 * time.Hour),
+	}
+
+	view := certToViewData(result)
+	if view.ValidityDays != 60 {
+		t.Errorf("certToViewData ValidityDays = %d, want 60", view.ValidityDays)
+	}
+	if !view.IsExpired {
+		t.Error("certToViewData IsExpired should be true")
+	}
+	if view.ExpiresIn == "" {
+		t.Error("certToViewData ExpiresIn should not be empty for expired cert")
+	}
+}

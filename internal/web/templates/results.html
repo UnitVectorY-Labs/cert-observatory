@@ -105,6 +105,24 @@
                         </div>
                         <div class="detail-grid">
                             <div class="detail-item">
+                                <div class="detail-label">Validity Period</div>
+                                <div class="detail-value detail-muted">{{$gc.ValidityDays}} days</div>
+                            </div>
+                            <div class="detail-item">
+                                {{if $gc.IsExpired}}
+                                <div class="detail-label">Expired</div>
+                                <div class="detail-value detail-expired">{{$gc.ExpiresIn}} ago</div>
+                                {{else if $gc.IsNotYetValid}}
+                                <div class="detail-label">Starts In</div>
+                                <div class="detail-value detail-future">not yet valid</div>
+                                {{else}}
+                                <div class="detail-label">Expires In</div>
+                                <div class="detail-value detail-valid">{{$gc.ExpiresIn}}</div>
+                                {{end}}
+                            </div>
+                        </div>
+                        <div class="detail-grid">
+                            <div class="detail-item">
                                 <div class="detail-label">Serial Number</div>
                                 <div class="detail-box detail-box-mono hex-value">{{$gc.SerialNumber}}</div>
                             </div>
@@ -240,6 +258,25 @@
                             <div class="detail-item">
                                 <div class="detail-label">Not After</div>
                                 <div class="detail-value {{if $cert.IsExpired}}detail-expired{{else}}detail-valid{{end}}">{{$cert.NotAfterFormatted}}</div>
+                            </div>
+                        </div>
+
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-label">Validity Period</div>
+                                <div class="detail-value detail-muted">{{$cert.ValidityDays}} days</div>
+                            </div>
+                            <div class="detail-item">
+                                {{if $cert.IsExpired}}
+                                <div class="detail-label">Expired</div>
+                                <div class="detail-value detail-expired">{{$cert.ExpiresIn}} ago</div>
+                                {{else if $cert.IsNotYetValid}}
+                                <div class="detail-label">Starts In</div>
+                                <div class="detail-value detail-future">not yet valid</div>
+                                {{else}}
+                                <div class="detail-label">Expires In</div>
+                                <div class="detail-value detail-valid">{{$cert.ExpiresIn}}</div>
+                                {{end}}
                             </div>
                         </div>
 
