@@ -101,72 +101,7 @@ func TestFormatPublicKey_Ed25519(t *testing.T) {
 	}
 }
 
-func TestFormatKeyLength_RSA2048(t *testing.T) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("failed to generate RSA key: %v", err)
-	}
-
-	cert := generateTestCert(t, &key.PublicKey, key)
-	result := formatKeyLength(cert)
-	if result != "2048 bits" {
-		t.Errorf("formatKeyLength(RSA 2048) = %q, want %q", result, "2048 bits")
-	}
-}
-
-func TestFormatKeyLength_RSA4096(t *testing.T) {
-	key, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		t.Fatalf("failed to generate RSA key: %v", err)
-	}
-
-	cert := generateTestCert(t, &key.PublicKey, key)
-	result := formatKeyLength(cert)
-	if result != "4096 bits" {
-		t.Errorf("formatKeyLength(RSA 4096) = %q, want %q", result, "4096 bits")
-	}
-}
-
-func TestFormatKeyLength_ECDSA_P256(t *testing.T) {
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate ECDSA key: %v", err)
-	}
-
-	cert := generateTestCert(t, &key.PublicKey, key)
-	result := formatKeyLength(cert)
-	if result != "256 bits" {
-		t.Errorf("formatKeyLength(ECDSA P-256) = %q, want %q", result, "256 bits")
-	}
-}
-
-func TestFormatKeyLength_ECDSA_P384(t *testing.T) {
-	key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate ECDSA key: %v", err)
-	}
-
-	cert := generateTestCert(t, &key.PublicKey, key)
-	result := formatKeyLength(cert)
-	if result != "384 bits" {
-		t.Errorf("formatKeyLength(ECDSA P-384) = %q, want %q", result, "384 bits")
-	}
-}
-
-func TestFormatKeyLength_Ed25519(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate Ed25519 key: %v", err)
-	}
-
-	cert := generateTestCert(t, pub, priv)
-	result := formatKeyLength(cert)
-	if result != "256 bits" {
-		t.Errorf("formatKeyLength(Ed25519) = %q, want %q", result, "256 bits")
-	}
-}
-
-func TestCertToViewData_KeyLength(t *testing.T) {
+func TestCertToViewData_PublicKeyInfo(t *testing.T) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("failed to generate ECDSA key: %v", err)
@@ -183,9 +118,6 @@ func TestCertToViewData_KeyLength(t *testing.T) {
 	}
 
 	view := certToViewData(result)
-	if view.KeyLength != "256 bits" {
-		t.Errorf("certToViewData KeyLength = %q, want %q", view.KeyLength, "256 bits")
-	}
 	if view.PublicKeyInfo != "ECDSA P-256" {
 		t.Errorf("certToViewData PublicKeyInfo = %q, want %q", view.PublicKeyInfo, "ECDSA P-256")
 	}

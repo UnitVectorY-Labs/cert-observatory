@@ -2,7 +2,6 @@ package web
 
 import (
 	"crypto/ecdsa"
-	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -76,7 +75,6 @@ type CertViewData struct {
 	SerialNumber         string
 	SignatureAlgorithm   string
 	PublicKeyInfo        string
-	KeyLength            string
 	SANs                 []string
 	KeyUsage             string
 	ExtKeyUsage          string
@@ -155,7 +153,6 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 	view.SerialNumber = formatSerialNumber(cert.SerialNumber.Bytes())
 	view.SignatureAlgorithm = cert.SignatureAlgorithm.String()
 	view.PublicKeyInfo = formatPublicKey(cert)
-	view.KeyLength = formatKeyLength(cert)
 
 	// Subject Alternative Names
 	if len(cert.DNSNames) > 0 || len(cert.IPAddresses) > 0 || len(cert.EmailAddresses) > 0 {
@@ -229,24 +226,6 @@ func formatPublicKey(cert *x509.Certificate) string {
 	default:
 		return cert.PublicKeyAlgorithm.String()
 	}
-}
-
-func formatKeyLength(cert *x509.Certificate) string {
-	switch cert.PublicKeyAlgorithm {
-	case x509.RSA:
-		if pub, ok := cert.PublicKey.(*rsa.PublicKey); ok {
-			return fmt.Sprintf("%d bits", pub.N.BitLen())
-		}
-	case x509.ECDSA:
-		if pub, ok := cert.PublicKey.(*ecdsa.PublicKey); ok {
-			return fmt.Sprintf("%d bits", pub.Curve.Params().BitSize)
-		}
-	case x509.Ed25519:
-		if _, ok := cert.PublicKey.(ed25519.PublicKey); ok {
-			return "256 bits"
-		}
-	}
-	return ""
 }
 
 func formatKeyUsage(ku x509.KeyUsage) string {
