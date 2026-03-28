@@ -51,6 +51,196 @@ function clearResults() {
     }
 }
 
+var TRUST_PATH_ICON_NAMESPACE = "http://www.w3.org/2000/svg";
+var TRUST_PATH_TABLER_ICONS = {
+    leaf: [
+        "M12 3a9 9 0 1 0 9 9a9 9 0 0 0 -9 -9",
+        "M3.6 9h16.8",
+        "M3.6 15h16.8",
+        "M11.5 3a17 17 0 0 0 0 18",
+        "M12.5 3a17 17 0 0 1 0 18",
+    ],
+    intermediate: [
+        "M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+        "M13 17.5v4.5l2 -1.5l2 1.5v-4.5",
+        "M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73",
+        "M6 9l12 0",
+        "M6 12l3 0",
+        "M6 15l2 0",
+    ],
+    root: [
+        "M9 12l2 2l4 -4",
+        "M12 3a9 9 0 1 0 9 9a9 9 0 0 0 -9 -9",
+    ],
+};
+
+function getTrustPathNodeType(nodeEl) {
+    if (!nodeEl || !nodeEl.classList) {
+        return "";
+    }
+    if (nodeEl.classList.contains("leaf")) {
+        return "leaf";
+    }
+    if (nodeEl.classList.contains("intermediate")) {
+        return "intermediate";
+    }
+    if (nodeEl.classList.contains("root")) {
+        return "root";
+    }
+    return "";
+}
+
+function getTrustPathNodeShape(nodeEl) {
+    if (!nodeEl || !nodeEl.children) {
+        return null;
+    }
+    for (var i = 0; i < nodeEl.children.length; i++) {
+        var child = nodeEl.children[i];
+        var tagName = (child.tagName || "").toLowerCase();
+        if (tagName === "rect" || tagName === "polygon" || tagName === "path" || tagName === "circle" || tagName === "ellipse") {
+            return child;
+        }
+    }
+    return null;
+}
+
+function getTrustPathNodeLabel(nodeEl) {
+    if (!nodeEl || !nodeEl.querySelector) {
+        return null;
+    }
+    return nodeEl.querySelector("g.label, foreignObject, .nodeLabel, .label");
+}
+
+function expandTrustPathNodeShape(shapeEl, amount) {
+    if (!shapeEl || shapeEl.dataset.tpExpanded === "true") {
+        return;
+    }
+    if ((shapeEl.tagName || "").toLowerCase() !== "rect") {
+        return;
+    }
+
+    var y = parseFloat(shapeEl.getAttribute("y") || "0");
+    var height = parseFloat(shapeEl.getAttribute("height") || "0");
+    if (!isFinite(y) || !isFinite(height)) {
+        return;
+    }
+
+    shapeEl.setAttribute("y", String(y - amount));
+    shapeEl.setAttribute("height", String(height + amount));
+    shapeEl.dataset.tpExpanded = "true";
+}
+
+function getTrustPathNodeIconColor(nodeEl, nodeType) {
+    var styles = window.getComputedStyle(document.documentElement);
+    var cssVarName = "--mermaid-label";
+    if (nodeEl && nodeEl.classList && nodeEl.classList.contains("missing")) {
+        cssVarName = "--mermaid-missing-stroke";
+    } else if (nodeType === "leaf") {
+        cssVarName = "--mermaid-leaf-stroke";
+    } else if (nodeType === "intermediate") {
+        cssVarName = "--mermaid-intermediate-stroke";
+    } else if (nodeType === "root") {
+        cssVarName = "--mermaid-root-stroke";
+    }
+
+    var color = styles.getPropertyValue(cssVarName).trim();
+    if (color) {
+        return color;
+    }
+
+    if (cssVarName === "--mermaid-leaf-stroke") {
+        return "#f97316";
+    }
+    if (cssVarName === "--mermaid-intermediate-stroke") {
+        return "#38bdf8";
+    }
+    if (cssVarName === "--mermaid-root-stroke") {
+        return "#22c55e";
+    }
+    if (cssVarName === "--mermaid-missing-stroke") {
+        return "#ef4444";
+    }
+    return "#0f172a";
+}
+
+function buildTrustPathIcon(nodeType, iconSize, strokeColor) {
+    var paths = TRUST_PATH_TABLER_ICONS[nodeType];
+    if (!paths || !paths.length) {
+        return null;
+    }
+
+    var iconGroup = document.createElementNS(TRUST_PATH_ICON_NAMESPACE, "g");
+    iconGroup.setAttribute("class", "tp-node-icon");
+    iconGroup.setAttribute("aria-hidden", "true");
+    iconGroup.setAttribute("pointer-events", "none");
+    iconGroup.setAttribute("data-base-stroke", strokeColor);
+    iconGroup.setAttribute("style", "--tp-icon-stroke: " + strokeColor + ";");
+    iconGroup.setAttribute("transform", "scale(" + (iconSize / 24).toFixed(4) + ")");
+
+    for (var i = 0; i < paths.length; i++) {
+        var path = document.createElementNS(TRUST_PATH_ICON_NAMESPACE, "path");
+        path.setAttribute("d", paths[i]);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", strokeColor);
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("stroke-linejoin", "round");
+        path.setAttribute("vector-effect", "non-scaling-stroke");
+        iconGroup.appendChild(path);
+    }
+    return iconGroup;
+}
+
+function decorateTrustPathMermaid(scope) {
+    var root = scope || document;
+    var svgs = root.querySelectorAll ? root.querySelectorAll(".trust-path-mermaid svg") : [];
+    if (!svgs.length) {
+        return;
+    }
+
+    for (var i = 0; i < svgs.length; i++) {
+        var nodes = svgs[i].querySelectorAll(".node");
+        for (var j = 0; j < nodes.length; j++) {
+            var nodeEl = nodes[j];
+            var nodeType = getTrustPathNodeType(nodeEl);
+            if (!nodeType || nodeEl.querySelector(".tp-node-icon")) {
+                continue;
+            }
+
+            var shapeEl = getTrustPathNodeShape(nodeEl);
+            var labelEl = getTrustPathNodeLabel(nodeEl);
+            if (!shapeEl || !labelEl || typeof shapeEl.getBBox !== "function" || typeof labelEl.getBBox !== "function") {
+                continue;
+            }
+
+            expandTrustPathNodeShape(shapeEl, 18);
+
+            var nodeBox = shapeEl.getBBox();
+            var labelBox = labelEl.getBBox();
+            var iconSize = Math.max(18, Math.min(22, nodeBox.height * 0.36));
+            var iconX = nodeBox.x + ((nodeBox.width - iconSize) / 2);
+            var iconY = nodeBox.y + 7;
+            var labelShift = Math.max(0, (iconY + iconSize + 6) - labelBox.y);
+
+            if (labelShift > 0) {
+                var labelTransform = labelEl.getAttribute("transform") || "";
+                labelEl.setAttribute("transform", (labelTransform + " translate(0 " + labelShift.toFixed(2) + ")").trim());
+            }
+
+            var iconGroup = buildTrustPathIcon(nodeType, iconSize, getTrustPathNodeIconColor(nodeEl, nodeType));
+            if (!iconGroup) {
+                continue;
+            }
+            iconGroup.setAttribute(
+                "transform",
+                "translate(" + iconX.toFixed(2) + " " + iconY.toFixed(2) + ") " + iconGroup.getAttribute("transform"),
+            );
+
+            nodeEl.insertBefore(iconGroup, labelEl);
+        }
+    }
+}
+
 function renderTrustPathMermaid(scope) {
     if (!window.mermaid) {
         return;
@@ -60,7 +250,11 @@ function renderTrustPathMermaid(scope) {
     if (!diagrams.length) {
         return;
     }
-    mermaid.run({ nodes: Array.from(diagrams) }).catch(function (err) {
+    mermaid.run({ nodes: Array.from(diagrams) }).then(function () {
+        window.requestAnimationFrame(function () {
+            decorateTrustPathMermaid(root);
+        });
+    }).catch(function (err) {
         console.error("failed to render mermaid trust-path diagram", err);
     });
 }
@@ -127,13 +321,15 @@ function setTrustPathNodeSelected(nodeEl, isSelected) {
         return;
     }
 
-    var shapes = nodeEl.querySelectorAll("rect, polygon, path, circle, ellipse");
-    for (var i = 0; i < shapes.length; i++) {
-        if (isSelected) {
-            shapes[i].style.setProperty("stroke-width", "5px", "important");
-        } else {
-            shapes[i].style.removeProperty("stroke-width");
-        }
+    var shapeEl = getTrustPathNodeShape(nodeEl);
+    if (!shapeEl) {
+        return;
+    }
+
+    if (isSelected) {
+        shapeEl.style.setProperty("stroke-width", "5px", "important");
+    } else {
+        shapeEl.style.removeProperty("stroke-width");
     }
 }
 

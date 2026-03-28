@@ -524,33 +524,57 @@ a {
   margin: 0;
 }
 
-.trust-path-mermaid .node.leaf rect,
-.trust-path-mermaid .node.leaf polygon,
-.trust-path-mermaid .node.leaf path {
+.trust-path-mermaid .node.leaf {
+  --mermaid-node-accent: var(--mermaid-leaf-stroke);
+}
+
+.trust-path-mermaid .node.intermediate {
+  --mermaid-node-accent: var(--mermaid-intermediate-stroke);
+}
+
+.trust-path-mermaid .node.root {
+  --mermaid-node-accent: var(--mermaid-root-stroke);
+}
+
+.trust-path-mermaid .node.missing {
+  --mermaid-node-accent: var(--mermaid-missing-stroke);
+}
+
+.trust-path-mermaid .node.leaf > rect,
+.trust-path-mermaid .node.leaf > polygon,
+.trust-path-mermaid .node.leaf > path,
+.trust-path-mermaid .node.leaf > circle,
+.trust-path-mermaid .node.leaf > ellipse {
   fill: var(--mermaid-leaf-fill) !important;
   stroke: var(--mermaid-leaf-stroke) !important;
   stroke-width: 2px !important;
 }
 
-.trust-path-mermaid .node.intermediate rect,
-.trust-path-mermaid .node.intermediate polygon,
-.trust-path-mermaid .node.intermediate path {
+.trust-path-mermaid .node.intermediate > rect,
+.trust-path-mermaid .node.intermediate > polygon,
+.trust-path-mermaid .node.intermediate > path,
+.trust-path-mermaid .node.intermediate > circle,
+.trust-path-mermaid .node.intermediate > ellipse {
   fill: var(--mermaid-intermediate-fill) !important;
   stroke: var(--mermaid-intermediate-stroke) !important;
   stroke-width: 2px !important;
 }
 
-.trust-path-mermaid .node.root rect,
-.trust-path-mermaid .node.root polygon,
-.trust-path-mermaid .node.root path {
+.trust-path-mermaid .node.root > rect,
+.trust-path-mermaid .node.root > polygon,
+.trust-path-mermaid .node.root > path,
+.trust-path-mermaid .node.root > circle,
+.trust-path-mermaid .node.root > ellipse {
   fill: var(--mermaid-root-fill) !important;
   stroke: var(--mermaid-root-stroke) !important;
   stroke-width: 2px !important;
 }
 
-.trust-path-mermaid .node.missing rect,
-.trust-path-mermaid .node.missing polygon,
-.trust-path-mermaid .node.missing path {
+.trust-path-mermaid .node.missing > rect,
+.trust-path-mermaid .node.missing > polygon,
+.trust-path-mermaid .node.missing > path,
+.trust-path-mermaid .node.missing > circle,
+.trust-path-mermaid .node.missing > ellipse {
   fill: var(--mermaid-missing-fill) !important;
   stroke: var(--mermaid-missing-stroke) !important;
   stroke-width: 2px !important;
@@ -561,21 +585,39 @@ a {
   cursor: pointer;
 }
 
-.trust-path-mermaid .node.interactive:hover rect,
-.trust-path-mermaid .node.interactive:hover polygon,
-.trust-path-mermaid .node.interactive:hover path {
+.trust-path-mermaid .node.interactive:hover > rect,
+.trust-path-mermaid .node.interactive:hover > polygon,
+.trust-path-mermaid .node.interactive:hover > path,
+.trust-path-mermaid .node.interactive:hover > circle,
+.trust-path-mermaid .node.interactive:hover > ellipse {
   filter: brightness(1.08);
 }
 
-.trust-path-mermaid .node.tp-active rect,
-.trust-path-mermaid .node.tp-active polygon,
-.trust-path-mermaid .node.tp-active path {
+.trust-path-mermaid .node.tp-active {
+  --mermaid-node-accent: var(--mermaid-active);
+}
+
+.trust-path-mermaid .node.tp-active > rect,
+.trust-path-mermaid .node.tp-active > polygon,
+.trust-path-mermaid .node.tp-active > path,
+.trust-path-mermaid .node.tp-active > circle,
+.trust-path-mermaid .node.tp-active > ellipse {
   stroke-width: 3px !important;
   stroke: var(--mermaid-active) !important;
 }
 
 .trust-path-mermaid .edgePath .path {
   stroke: var(--mermaid-edge) !important;
+  stroke-width: 2px !important;
+}
+
+.trust-path-mermaid .tp-node-icon {
+  pointer-events: none;
+}
+
+.trust-path-mermaid .node .tp-node-icon path {
+  fill: none !important;
+  stroke: var(--tp-icon-stroke) !important;
   stroke-width: 2px !important;
 }
 
