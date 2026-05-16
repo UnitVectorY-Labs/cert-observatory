@@ -2,12 +2,21 @@ package web
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/UnitVectorY-Labs/cert-observatory/internal/certutil"
 )
 
 // mockRepository implements the Repository interface for testing.
@@ -59,6 +68,10 @@ func (m *mockRepository) ReleaseLock(ctx context.Context, domain string, lockID 
 
 func (m *mockRepository) RecordCrawlResult(ctx context.Context, result *CrawlResultInput) error {
 	m.crawlResults = append(m.crawlResults, result)
+	return nil
+}
+
+func (m *mockRepository) StoreCertificate(ctx context.Context, cert *CertificateResult) error {
 	return nil
 }
 
@@ -495,4 +508,242 @@ func TestHandleInspect_ReservedDomain(t *testing.T) {
 			}
 		})
 	}
+}
+
+// generateTestCA creates a self-signed CA certificate and returns the CA cert and signing key.
+func generateTestCA(t *testing.T) (*x509.Certificate, *ecdsa.PrivateKey) {
+t.Helper()
+caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+if err != nil {
+t.Fatalf("generate CA key: %v", err)
+}
+ski := make([]byte, 20)
+if _, err := rand.Read(ski); err != nil {
+t.Fatalf("generate SKI: %v", err)
+}
+tmpl := &x509.Certificate{
+SerialNumber:          big.NewInt(1),
+Subject:               pkix.Name{CommonName: "Test Root CA"},
+NotBefore:             time.Now().Add(-24 * time.Hour),
+NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+IsCA:                  true,
+BasicConstraintsValid: true,
+KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+SubjectKeyId:          ski,
+}
+der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &caKey.PublicKey, caKey)
+if err != nil {
+t.Fatalf("create CA cert: %v", err)
+}
+cert, err := x509.ParseCertificate(der)
+if err != nil {
+t.Fatalf("parse CA cert: %v", err)
+}
+return cert, caKey
+}
+
+// generateTestLeaf creates a leaf certificate signed by the given CA.
+func generateTestLeaf(t *testing.T, caCert *x509.Certificate, caKey *ecdsa.PrivateKey) *x509.Certificate {
+t.Helper()
+leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+if err != nil {
+t.Fatalf("generate leaf key: %v", err)
+}
+tmpl := &x509.Certificate{
+SerialNumber:          big.NewInt(2),
+Subject:               pkix.Name{CommonName: "test.example.com"},
+NotBefore:             time.Now().Add(-24 * time.Hour),
+NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+KeyUsage:              x509.KeyUsageDigitalSignature,
+BasicConstraintsValid: true,
+AuthorityKeyId:        caCert.SubjectKeyId,
+}
+der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &leafKey.PublicKey, caKey)
+if err != nil {
+t.Fatalf("create leaf cert: %v", err)
+}
+cert, err := x509.ParseCertificate(der)
+if err != nil {
+t.Fatalf("parse leaf cert: %v", err)
+}
+return cert
+}
+
+// pemEncodeTest encodes a DER certificate as PEM for testing.
+func pemEncodeTest(der []byte) string {
+return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+}
+
+func TestHandleManualCert_EmptyPEM(t *testing.T) {
+repo := &mockRepository{}
+crawler := &mockCrawler{}
+server, err := New(DefaultConfig(), repo, crawler)
+if err != nil {
+t.Fatalf("create server: %v", err)
+}
+
+form := url.Values{}
+form.Set("pem", "")
+req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+req.Header.Set("HX-Request", "true")
+req.Host = "localhost:8080"
+
+w := httptest.NewRecorder()
+server.handleManualCert(w, req)
+
+if w.Code != http.StatusBadRequest {
+t.Errorf("expected 400, got %d", w.Code)
+}
+if !strings.Contains(w.Body.String(), "No Certificate") {
+t.Error("expected 'No Certificate' error")
+}
+}
+
+func TestHandleManualCert_InvalidPEM(t *testing.T) {
+repo := &mockRepository{}
+crawler := &mockCrawler{}
+server, err := New(DefaultConfig(), repo, crawler)
+if err != nil {
+t.Fatalf("create server: %v", err)
+}
+
+form := url.Values{}
+form.Set("pem", "not a pem certificate")
+req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+req.Header.Set("HX-Request", "true")
+req.Host = "localhost:8080"
+
+w := httptest.NewRecorder()
+server.handleManualCert(w, req)
+
+if w.Code != http.StatusBadRequest {
+t.Errorf("expected 400, got %d", w.Code)
+}
+if !strings.Contains(w.Body.String(), "Invalid PEM") {
+t.Error("expected 'Invalid PEM' error")
+}
+}
+
+func TestHandleManualCert_SelfSigned(t *testing.T) {
+caCert, _ := generateTestCA(t)
+
+repo := &mockRepository{}
+crawler := &mockCrawler{}
+server, err := New(DefaultConfig(), repo, crawler)
+if err != nil {
+t.Fatalf("create server: %v", err)
+}
+
+form := url.Values{}
+form.Set("pem", pemEncodeTest(caCert.Raw))
+req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+req.Header.Set("HX-Request", "true")
+req.Host = "localhost:8080"
+
+w := httptest.NewRecorder()
+server.handleManualCert(w, req)
+
+if w.Code != http.StatusBadRequest {
+t.Errorf("expected 400, got %d", w.Code)
+}
+if !strings.Contains(w.Body.String(), "Self-Signed") {
+t.Error("expected self-signed error")
+}
+}
+
+func TestHandleManualCert_UntrustedCert(t *testing.T) {
+caCert, caKey := generateTestCA(t)
+leafCert := generateTestLeaf(t, caCert, caKey)
+
+// repo has no matching SKI candidates → untrusted
+repo := &mockRepository{skiCertificates: nil}
+crawler := &mockCrawler{}
+server, err := New(DefaultConfig(), repo, crawler)
+if err != nil {
+t.Fatalf("create server: %v", err)
+}
+
+form := url.Values{}
+form.Set("pem", pemEncodeTest(leafCert.Raw))
+req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+req.Header.Set("HX-Request", "true")
+req.Host = "localhost:8080"
+
+w := httptest.NewRecorder()
+server.handleManualCert(w, req)
+
+if w.Code != http.StatusBadRequest {
+t.Errorf("expected 400, got %d", w.Code)
+}
+if !strings.Contains(w.Body.String(), "Untrusted") {
+t.Error("expected untrusted error")
+}
+}
+
+func TestHandleManualCert_ValidCert(t *testing.T) {
+caCert, caKey := generateTestCA(t)
+leafCert := generateTestLeaf(t, caCert, caKey)
+
+// Provide the CA cert as a trusted SKI candidate
+caInfo := certutil.ParseX509Certificate(caCert)
+skiCand := &CertificateResult{
+CertHash:  caInfo.CertHash,
+DER:       caInfo.DER,
+PEM:       caInfo.PEM(),
+Subject:   caInfo.Subject,
+Issuer:    caInfo.Issuer,
+NotBefore: caInfo.NotBefore,
+NotAfter:  caInfo.NotAfter,
+SKI:       caInfo.SKI,
+AKI:       caInfo.AKI,
+Parsed:    caInfo.Parsed,
+}
+
+repo := &mockRepository{skiCertificates: []*CertificateResult{skiCand}}
+crawler := &mockCrawler{}
+server, err := New(DefaultConfig(), repo, crawler)
+if err != nil {
+t.Fatalf("create server: %v", err)
+}
+
+form := url.Values{}
+form.Set("pem", pemEncodeTest(leafCert.Raw))
+req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+req.Header.Set("HX-Request", "true")
+req.Host = "localhost:8080"
+
+w := httptest.NewRecorder()
+server.handleManualCert(w, req)
+
+if w.Code != http.StatusOK {
+t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+}
+if !strings.Contains(w.Body.String(), "manual import") {
+t.Error("expected 'manual import' status chip in results")
+}
+}
+
+func TestHandleIndex_ManualMode(t *testing.T) {
+repo := &mockRepository{}
+crawler := &mockCrawler{}
+server, err := New(DefaultConfig(), repo, crawler)
+if err != nil {
+t.Fatalf("create server: %v", err)
+}
+
+req := httptest.NewRequest(http.MethodGet, "/?manual", nil)
+w := httptest.NewRecorder()
+server.handleIndex(w, req)
+
+if w.Code != http.StatusOK {
+t.Errorf("expected 200, got %d", w.Code)
+}
+if !strings.Contains(w.Body.String(), "Import Certificate") {
+t.Error("expected 'Import Certificate' heading in manual mode")
+}
 }

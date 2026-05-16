@@ -283,7 +283,26 @@ func (r *WebRepository) RecordCrawlResult(ctx context.Context, input *web.CrawlR
 	return err
 }
 
-// parseCertificateDER parses a DER-encoded certificate.
+// StoreCertificate stores a single certificate in the database (upsert by hash).
+func (r *WebRepository) StoreCertificate(ctx context.Context, cert *web.CertificateResult) error {
+	if cert == nil {
+		return fmt.Errorf("certificate is nil")
+	}
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO certificates (cert_hash, der, subject, issuer, not_before, not_after, ski, aki)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (cert_hash) DO NOTHING
+	`, cert.CertHash, cert.DER,
+		cert.Subject, cert.Issuer,
+		cert.NotBefore, cert.NotAfter,
+		nullableBytes(cert.SKI), nullableBytes(cert.AKI))
+	if err != nil {
+		return fmt.Errorf("store certificate: %w", err)
+	}
+	return nil
+}
+
+
 func parseCertificateDER(der []byte) *x509.Certificate {
 	info, err := certutil.ParseCertificate(der)
 	if err != nil {

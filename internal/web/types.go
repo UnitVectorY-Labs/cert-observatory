@@ -102,6 +102,8 @@ type ResultsViewData struct {
 	Chain              []*CertViewData
 	// ChainGraph is the certificate trust path graph for the chain visualization section.
 	ChainGraph *ChainGraphData
+	// IsManual indicates the result was produced from a manually uploaded PEM certificate.
+	IsManual bool
 }
 
 // certToViewData converts a CertificateResult to CertViewData.

@@ -3,7 +3,9 @@
     <div class="results-toolbar">
         <div class="status-row">
             <span class="domain-name">{{.Domain}}</span>
-            {{if .IsCached}}
+            {{if .IsManual}}
+            <span class="status-chip status-fresh">manual import</span>
+            {{else if .IsCached}}
             <span class="status-chip status-cached">cached {{.CacheAge}}</span>
             {{else}}
             <span class="status-chip status-fresh">fresh</span>

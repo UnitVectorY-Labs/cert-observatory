@@ -81,6 +81,8 @@ type Repository interface {
 	ReleaseLock(ctx context.Context, domain string, lockID string) error
 	// RecordCrawlResult records the result of a crawl operation.
 	RecordCrawlResult(ctx context.Context, result *CrawlResultInput) error
+	// StoreCertificate stores a single certificate in the database.
+	StoreCertificate(ctx context.Context, cert *CertificateResult) error
 }
 
 // Crawler defines the TLS crawling operations.
@@ -149,6 +151,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /", s.handleIndex)
 	mux.HandleFunc("POST /inspect", s.wrapWithOriginCheck(s.handleInspect))
 	mux.HandleFunc("POST /refresh", s.wrapWithOriginCheck(s.handleRefresh))
+	mux.HandleFunc("POST /manual", s.wrapWithOriginCheck(s.handleManualCert))
 	mux.HandleFunc("GET /cert/{hash}", s.handleCertDetails)
 
 	// Wrap with security headers middleware
