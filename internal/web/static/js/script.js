@@ -130,7 +130,7 @@ function findRenderedMermaidEdges(nodeId) {
     var allEdgePaths = document.querySelectorAll(".trust-path-mermaid path.flowchart-link");
     var matches = [];
     var escapedId = nodeId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    var pattern = new RegExp("(?:^L[_-]|[_-])" + escapedId + "(?:[_-]|$)");
+    var pattern = new RegExp("^L_" + escapedId + "_|_" + escapedId + "_");
     for (var i = 0; i < allEdgePaths.length; i++) {
         var el = allEdgePaths[i];
         var id = el.id || "";
