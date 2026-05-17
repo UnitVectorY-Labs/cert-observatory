@@ -1983,6 +1983,10 @@ a {
   stroke: var(--mermaid-edge) !important;
   stroke-width: 2px !important;
 }
+.trust-path-mermaid path.flowchart-link.tp-active-edge {
+  stroke-width: 3px !important;
+  stroke: var(--mermaid-active) !important;
+}
 .trust-path-cert-pane {
   animation: fadeIn 0.2s ease-in;
 }
