@@ -57,9 +57,13 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 		s.renderManualError(w, r, "Invalid PEM", fmt.Sprintf("Expected a CERTIFICATE block, got %q.", block.Type), http.StatusBadRequest)
 		return
 	}
-	// Only one certificate is allowed
-	if extraBlock, _ := pem.Decode(rest); extraBlock != nil && extraBlock.Type == "CERTIFICATE" {
-		s.renderManualError(w, r, "Multiple Certificates", "Only a single PEM certificate is allowed. Please provide exactly one certificate.", http.StatusBadRequest)
+	// Only one certificate is allowed — reject any additional PEM blocks of any type or non-whitespace junk
+	if extraBlock, _ := pem.Decode(rest); extraBlock != nil {
+		s.renderManualError(w, r, "Multiple PEM Blocks", "Only a single PEM certificate block is allowed. Please provide exactly one certificate.", http.StatusBadRequest)
+		return
+	}
+	if len(strings.TrimSpace(string(rest))) > 0 {
+		s.renderManualError(w, r, "Unexpected Data", "Only a single PEM certificate is allowed. Please remove any trailing data after the certificate.", http.StatusBadRequest)
 		return
 	}
 
@@ -114,11 +118,9 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 		if candidate.Parsed == nil {
 			continue
 		}
-		if err := candidate.Parsed.CheckSignature(
-			x509Cert.SignatureAlgorithm,
-			x509Cert.RawTBSCertificate,
-			x509Cert.Signature,
-		); err == nil {
+		// CheckSignatureFrom validates the signature AND enforces that the candidate
+		// is a CA certificate (IsCA=true with KeyUsageCertSign where relevant).
+		if err := x509Cert.CheckSignatureFrom(candidate.Parsed); err == nil {
 			trusted = true
 			break
 		}
@@ -151,14 +153,21 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 		Domain:   subjectCN,
 		IsManual: true,
 	}
-	data.Chain = []*CertViewData{certToViewData(uploaded)}
-	assignChainLabelsAndColors(data.Chain)
+	viewData := certToViewData(uploaded)
+	// Assign an appropriate label based on the actual certificate type rather than
+	// defaulting to "Server Certificate" (which is misleading for CA/intermediate certs).
+	if viewData.IsSelfSigned {
+		viewData.CertLabel = "Self Signed Certificate"
+	} else if viewData.IsCA {
+		viewData.CertLabel = "Intermediate CA"
+	} else {
+		viewData.CertLabel = "End-Entity Certificate"
+	}
+	data.Chain = []*CertViewData{viewData}
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, []*CertificateResult{uploaded}, filters)
 
-	s.renderResults(w, r, data)
+	s.renderManualResults(w, r, data)
 }
-
-// isHTMXRequest checks if the request is an HTMX request.
 func isHTMXRequest(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }
@@ -519,6 +528,27 @@ func (s *Server) renderResults(w http.ResponseWriter, r *http.Request, data *Res
 	pageData := &IndexData{Results: data}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render full page with results", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// renderManualResults renders manual import results, keeping ManualMode=true for full-page responses.
+func (s *Server) renderManualResults(w http.ResponseWriter, r *http.Request, data *ResultsViewData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// If HTMX request, render just the results fragment
+	if isHTMXRequest(r) {
+		if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
+			s.logger.Error("failed to render manual results", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// For full-page responses keep ManualMode=true so the PEM textarea is shown again
+	pageData := &IndexData{Results: data, ManualMode: true}
+	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
+		s.logger.Error("failed to render manual full page with results", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
