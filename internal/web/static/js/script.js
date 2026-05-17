@@ -122,6 +122,25 @@ function findRenderedMermaidNodes(nodeId) {
     return matches;
 }
 
+function findRenderedMermaidEdges(nodeId) {
+    if (!nodeId) {
+        return [];
+    }
+    // In Mermaid v11, edges are <path class="flowchart-link"> with IDs like L_n0_n1_0.
+    var allEdgePaths = document.querySelectorAll(".trust-path-mermaid path.flowchart-link");
+    var matches = [];
+    var escapedId = nodeId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    var pattern = new RegExp("(?:^L[_-]|[_-])" + escapedId + "(?:[_-]|$)");
+    for (var i = 0; i < allEdgePaths.length; i++) {
+        var el = allEdgePaths[i];
+        var id = el.id || "";
+        if (pattern.test(id)) {
+            matches.push(el);
+        }
+    }
+    return matches;
+}
+
 function setTrustPathNodeSelected(nodeEl, isSelected) {
     if (!nodeEl) {
         return;
@@ -149,10 +168,20 @@ function selectTrustPathCert(nodeId, certIdx) {
         setTrustPathNodeSelected(allNodes[i], false);
     }
 
+    var allEdges = document.querySelectorAll(".trust-path-mermaid path.flowchart-link");
+    for (var e = 0; e < allEdges.length; e++) {
+        allEdges[e].classList.remove("tp-active-edge");
+    }
+
     var activeNodes = findRenderedMermaidNodes(nodeId);
     for (var k = 0; k < activeNodes.length; k++) {
         activeNodes[k].classList.add("tp-active");
         setTrustPathNodeSelected(activeNodes[k], true);
+    }
+
+    var activeEdges = findRenderedMermaidEdges(nodeId);
+    for (var j = 0; j < activeEdges.length; j++) {
+        activeEdges[j].classList.add("tp-active-edge");
     }
 
     var chainSection = document.getElementById("chain-view-section");
