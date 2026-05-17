@@ -302,7 +302,6 @@ func (r *WebRepository) StoreCertificate(ctx context.Context, cert *web.Certific
 	return nil
 }
 
-
 func parseCertificateDER(der []byte) *x509.Certificate {
 	info, err := certutil.ParseCertificate(der)
 	if err != nil {

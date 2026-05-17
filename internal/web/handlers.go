@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"html"
 	"net/http"
 	"strings"
 	"time"
@@ -454,7 +455,7 @@ func (s *Server) renderManualError(w http.ResponseWriter, r *http.Request, title
 	if isHTMXRequest(r) {
 		if err := s.templates.ExecuteTemplate(w, "error", errData); err != nil {
 			s.logger.Error("failed to render error template", "error", err)
-			fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", title, message)
+			fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", html.EscapeString(title), html.EscapeString(message))
 		}
 		return
 	}
@@ -462,7 +463,7 @@ func (s *Server) renderManualError(w http.ResponseWriter, r *http.Request, title
 	pageData := &IndexData{Error: errData, ManualMode: true}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render error page", "error", err)
-		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", title, message)
+		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", html.EscapeString(title), html.EscapeString(message))
 	}
 }
 func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, result *DomainResult, lastCrawlFailed bool, filters ChainGraphFilters) {
