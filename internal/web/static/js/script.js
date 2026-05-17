@@ -177,50 +177,6 @@ function selectTrustPathCert(nodeId, certIdx) {
     }
 }
 
-function downloadTrustPathCerts(button) {
-    var domain = (button && button.dataset && button.dataset.domain) ? button.dataset.domain : "certificates";
-    var panes = document.querySelectorAll(".trust-path-cert-pane");
-    var parts = [];
-
-    for (var i = 0; i < panes.length; i++) {
-        var pemBlock = panes[i].querySelector(".trust-path-pem");
-        if (!pemBlock) { continue; }
-
-        var subject = pemBlock.dataset.subject || "";
-        var issuer = pemBlock.dataset.issuer || "";
-        var serial = pemBlock.dataset.serial || "";
-        var notBefore = pemBlock.dataset.notBefore || "";
-        var notAfter = pemBlock.dataset.notAfter || "";
-        var pem = pemBlock.textContent.trim();
-
-        if (!pem) { continue; }
-
-        var header = [];
-        if (subject)   { header.push("# Subject: " + subject); }
-        if (issuer)    { header.push("# Issuer: " + issuer); }
-        if (serial)    { header.push("# Serial: " + serial); }
-        if (notBefore) { header.push("# Not Before: " + notBefore); }
-        if (notAfter)  { header.push("# Not After: " + notAfter); }
-
-        parts.push(header.join("\n") + "\n" + pem);
-    }
-
-    if (parts.length === 0) { return; }
-
-    var content = parts.join("\n\n") + "\n";
-    var filename = domain.replace(/[^a-zA-Z0-9.-]/g, "_") + "-certificates.pem";
-
-    var blob = new Blob([content], { type: "application/x-pem-file" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
 function getHexSeparator() {
     try {
         return localStorage.getItem("hexSeparator") || "colon";

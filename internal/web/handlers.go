@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -168,6 +169,7 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 	}
 	data.Chain = []*CertViewData{viewData}
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, []*CertificateResult{uploaded}, filters)
+	data.DownloadURL = buildManualDownloadURL(hex.EncodeToString(uploaded.CertHash), filters)
 
 	s.renderManualResults(w, r, data)
 }
@@ -485,6 +487,7 @@ func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, res
 
 	// Build the chain graph from the chain certificates
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain, filters)
+	data.DownloadURL = buildNormalDownloadURL(result.Domain, filters)
 
 	s.renderResults(w, r, data)
 }
@@ -510,6 +513,7 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 
 	// Build the chain graph from the chain certificates
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain, filters)
+	data.DownloadURL = buildNormalDownloadURL(result.Domain, filters)
 
 	s.renderResults(w, r, data)
 }
@@ -649,4 +653,127 @@ func formatDuration(d time.Duration) string {
 		return "1 hour"
 	}
 	return fmt.Sprintf("%d hours", hours)
+}
+
+// buildNormalDownloadURL constructs the server-side download URL for a domain.
+func buildNormalDownloadURL(domainName string, filters ChainGraphFilters) string {
+	params := url.Values{}
+	params.Set("domain", domainName)
+	if filters.ShowNonChainCerts {
+		params.Set("showNonChainCerts", "true")
+	}
+	if filters.ShowExpired {
+		params.Set("showExpired", "true")
+	}
+	return "/download?" + params.Encode()
+}
+
+// buildManualDownloadURL constructs the server-side download URL for a manually imported cert.
+func buildManualDownloadURL(leafHashHex string, filters ChainGraphFilters) string {
+	params := url.Values{}
+	params.Set("cert", leafHashHex)
+	if filters.ShowExpired {
+		params.Set("showExpired", "true")
+	}
+	return "/download?" + params.Encode()
+}
+
+// sanitizeDownloadFilename removes unsafe characters from a filename base.
+func sanitizeDownloadFilename(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '.' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	result := b.String()
+	if result == "" {
+		return "certificates"
+	}
+	return result
+}
+
+// handleDownload serves a PEM bundle of all certificates in the trust path graph.
+func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
+	domainParam := r.URL.Query().Get("domain")
+	certHashHex := r.URL.Query().Get("cert")
+
+	var chainCerts []*CertificateResult
+	var filters ChainGraphFilters
+	var filenameBase string
+
+	if domainParam != "" {
+		normalizedDomain, err := domain.NormalizeAndValidate(domainParam)
+		if err != nil {
+			http.Error(w, "Invalid domain", http.StatusBadRequest)
+			return
+		}
+		domainResult, err := s.repo.GetDomainWithChain(r.Context(), normalizedDomain)
+		if err != nil || domainResult == nil || !domainResult.HasChain {
+			http.Error(w, "Domain not found", http.StatusNotFound)
+			return
+		}
+		chainCerts = domainResult.Chain
+		filters = ChainGraphFilters{
+			ShowNonChainCerts: r.URL.Query().Get("showNonChainCerts") == "true",
+			ShowExpired:       r.URL.Query().Get("showExpired") == "true",
+		}
+		filenameBase = normalizedDomain
+	} else if certHashHex != "" {
+		hash, err := hex.DecodeString(certHashHex)
+		if err != nil || len(hash) != 32 {
+			http.Error(w, "Invalid cert hash", http.StatusBadRequest)
+			return
+		}
+		cert, err := s.repo.GetCertificateByHash(r.Context(), hash)
+		if err != nil {
+			http.Error(w, "Certificate not found", http.StatusNotFound)
+			return
+		}
+		chainCerts = []*CertificateResult{cert}
+		filters = ChainGraphFilters{
+			ShowNonChainCerts: true,
+			ShowExpired:       r.URL.Query().Get("showExpired") == "true",
+		}
+		viewData := certToViewData(cert)
+		filenameBase = viewData.SubjectCN
+		if filenameBase == "" {
+			filenameBase = "certificate"
+		}
+	} else {
+		http.Error(w, "Missing domain or cert parameter", http.StatusBadRequest)
+		return
+	}
+
+	graph := buildChainGraph(r.Context(), s.repo, chainCerts, filters)
+	if graph == nil || len(graph.AllCerts) == 0 {
+		http.Error(w, "No certificates found", http.StatusNotFound)
+		return
+	}
+
+	var buf strings.Builder
+	for _, cert := range graph.AllCerts {
+		cn := cert.SubjectCN
+		if cn == "" {
+			cn = cert.SubjectDN
+		}
+		if cn == "" {
+			cn = "(unknown)"
+		}
+		// Sanitize the CN so it cannot inject newlines into the PEM comment line.
+		cn = strings.NewReplacer("\r", " ", "\n", " ").Replace(cn)
+		buf.WriteString("# " + cn + "\n")
+		buf.WriteString(strings.TrimSpace(cert.PEM) + "\n")
+	}
+
+	safeBase := sanitizeDownloadFilename(filenameBase)
+	filename := safeBase + "-certificates.pem"
+
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	// sanitizeDownloadFilename strips all characters that could break the quoted filename
+	// parameter; the explicit quote escaping here adds a defense-in-depth layer.
+	w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filename, `"`, `\"`)+ `"`)
+	fmt.Fprint(w, buf.String())
 }

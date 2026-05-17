@@ -153,6 +153,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("POST /refresh", s.wrapWithOriginCheck(s.handleRefresh))
 	mux.HandleFunc("POST /manual", s.wrapWithOriginCheck(s.handleManualCert))
 	mux.HandleFunc("GET /cert/{hash}", s.handleCertDetails)
+	mux.HandleFunc("GET /download", s.handleDownload)
 
 	// Wrap with security headers middleware
 	handler := s.securityHeadersMiddleware(mux)

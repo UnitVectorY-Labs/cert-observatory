@@ -1087,3 +1087,152 @@ if !strings.Contains(body, "Import Certificate") {
 t.Errorf("expected 'Import Certificate' heading (manual mode) in full-page response, got domain form instead")
 }
 }
+
+func TestHandleDownload_MissingParams(t *testing.T) {
+	server, err := New(DefaultConfig(), &mockRepository{}, &mockCrawler{})
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/download", nil)
+	w := httptest.NewRecorder()
+	server.handleDownload(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing params, got %d", w.Code)
+	}
+}
+
+func TestHandleDownload_InvalidDomain(t *testing.T) {
+	server, err := New(DefaultConfig(), &mockRepository{}, &mockCrawler{})
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/download?domain=not-valid!!!", nil)
+	w := httptest.NewRecorder()
+	server.handleDownload(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid domain, got %d", w.Code)
+	}
+}
+
+func TestHandleDownload_DomainNotFound(t *testing.T) {
+	// mockRepository returns a DomainResult with HasChain=false by default
+	repo := &mockRepository{}
+	server, err := New(DefaultConfig(), repo, &mockCrawler{})
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/download?domain=github.com", nil)
+	w := httptest.NewRecorder()
+	server.handleDownload(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for domain with no chain, got %d", w.Code)
+	}
+}
+
+func TestHandleDownload_DomainWithChain(t *testing.T) {
+	pemStr := "-----BEGIN CERTIFICATE-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA\n-----END CERTIFICATE-----\n"
+	repo := &mockRepository{
+		domainResult: &DomainResult{
+			Domain:   "github.com",
+			HasChain: true,
+			Chain: []*CertificateResult{
+				{
+					CertHash:  make([]byte, 32),
+					PEM:       pemStr,
+					Subject:   "CN=github.com",
+					NotBefore: time.Now().Add(-24 * time.Hour),
+					NotAfter:  time.Now().Add(365 * 24 * time.Hour),
+				},
+			},
+			UpdatedAt: time.Now(),
+		},
+		canForced: true,
+	}
+	server, err := New(DefaultConfig(), repo, &mockCrawler{})
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/download?domain=github.com&showNonChainCerts=true", nil)
+	w := httptest.NewRecorder()
+	server.handleDownload(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/x-pem-file" {
+		t.Errorf("expected Content-Type application/x-pem-file, got %s", ct)
+	}
+	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, "github.com-certificates.pem") {
+		t.Errorf("expected filename github.com-certificates.pem in Content-Disposition, got %s", cd)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "-----BEGIN CERTIFICATE-----") {
+		t.Error("expected PEM content in response body")
+	}
+}
+
+func TestHandleDownload_InvalidCertHash(t *testing.T) {
+	server, err := New(DefaultConfig(), &mockRepository{}, &mockCrawler{})
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/download?cert=notahex", nil)
+	w := httptest.NewRecorder()
+	server.handleDownload(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid cert hash, got %d", w.Code)
+	}
+}
+
+func TestSanitizeDownloadFilename(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"github.com", "github.com"},
+		{"my-cert", "my-cert"},
+		{"CN=github.com, O=GitHub", "CN_github.com__O_GitHub"},
+		{"", "certificates"},
+		{"hello world", "hello_world"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := sanitizeDownloadFilename(tt.input)
+			if got != tt.expected {
+				t.Errorf("sanitizeDownloadFilename(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBuildNormalDownloadURL(t *testing.T) {
+	url := buildNormalDownloadURL("github.com", ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: false})
+	if !strings.Contains(url, "domain=github.com") {
+		t.Errorf("expected domain param in URL, got %s", url)
+	}
+	if !strings.Contains(url, "showNonChainCerts=true") {
+		t.Errorf("expected showNonChainCerts param in URL, got %s", url)
+	}
+	if strings.Contains(url, "showExpired") {
+		t.Errorf("expected no showExpired param when false, got %s", url)
+	}
+}
+
+func TestBuildManualDownloadURL(t *testing.T) {
+	u := buildManualDownloadURL("abcdef1234", ChainGraphFilters{ShowExpired: true})
+	if !strings.Contains(u, "cert=abcdef1234") {
+		t.Errorf("expected cert param in URL, got %s", u)
+	}
+	if !strings.Contains(u, "showExpired=true") {
+		t.Errorf("expected showExpired param in URL, got %s", u)
+	}
+}
