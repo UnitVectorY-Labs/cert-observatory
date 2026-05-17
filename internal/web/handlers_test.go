@@ -167,6 +167,33 @@ func TestHandleIndex(t *testing.T) {
 	}
 }
 
+func TestHandleIndex_PortModePreservesInspectQuery(t *testing.T) {
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?port", nil)
+	w := httptest.NewRecorder()
+
+	server.handleIndex(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, `action="/inspect?port"`) {
+		t.Errorf("expected inspect form action to preserve port mode, got: %s", body)
+	}
+	if !strings.Contains(body, `hx-post="/inspect?port"`) {
+		t.Errorf("expected HTMX post target to preserve port mode, got: %s", body)
+	}
+}
+
 func TestHandleInspect_ValidDomain(t *testing.T) {
 	repo := &mockRepository{
 		canStandard:  true,
@@ -193,6 +220,40 @@ func TestHandleInspect_ValidDomain(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+}
+
+func TestHandleInspect_ValidDomainWithPortMode(t *testing.T) {
+	repo := &mockRepository{
+		canStandard:  true,
+		canForced:    true,
+		lockAcquired: true,
+	}
+	crawler := &mockCrawler{}
+
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("domain", "smtp.gmail.com:465")
+
+	req := httptest.NewRequest(http.MethodPost, "/inspect?port", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	server.handleInspect(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+	if len(repo.crawlResults) != 1 {
+		t.Fatalf("expected one crawl result, got %d", len(repo.crawlResults))
+	}
+	if repo.crawlResults[0].Domain != "smtp.gmail.com" || repo.crawlResults[0].Port != 465 {
+		t.Fatalf("expected crawl result for smtp.gmail.com:465, got %s:%d", repo.crawlResults[0].Domain, repo.crawlResults[0].Port)
 	}
 }
 
@@ -233,6 +294,9 @@ func TestHandleInspect_InvalidDomain(t *testing.T) {
 			body := w.Body.String()
 			if !strings.Contains(strings.ToLower(body), strings.ToLower(tt.wantErr)) {
 				t.Errorf("Expected error containing %q, got: %s", tt.wantErr, body)
+			}
+			if tt.name == "domain with port" && strings.Contains(body, "?port") {
+				t.Errorf("port-mode error should not disclose hidden query parameter, got: %s", body)
 			}
 		})
 	}

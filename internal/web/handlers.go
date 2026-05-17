@@ -22,13 +22,15 @@ type IndexData struct {
 	Results    *ResultsViewData
 	Error      *ErrorData
 	ManualMode bool
+	PortMode   bool
 }
 
 // handleIndex serves the main page (GET only, read-only, never triggers crawl).
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, manualMode := r.URL.Query()["manual"]
-	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{ManualMode: manualMode}); err != nil {
+	portMode := r.URL.Query().Has("port")
+	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{ManualMode: manualMode, PortMode: portMode}); err != nil {
 		s.logger.Error("failed to render index", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -625,7 +627,7 @@ func formatDomainError(err error) string {
 	case domain.ErrDomainHasScheme:
 		return "Please enter just the domain name without http:// or https://."
 	case domain.ErrDomainHasPort:
-		return "Please enter just the domain name without a port number, or use ?port to enable host:port input."
+		return "Please enter just the domain name without a port number."
 	case domain.ErrInvalidPort:
 		return "Port must be a number between 1 and 65535."
 	case domain.ErrDomainHasPath:
