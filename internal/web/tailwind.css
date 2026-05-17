@@ -490,6 +490,16 @@ a {
   border-left: 3px solid #4ade80 !important;
 }
 
+.graph-download-row {
+  @apply flex justify-end pt-1;
+}
+
+.btn-graph-download {
+  @apply inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600;
+  @apply transition-colors hover:bg-slate-100 hover:text-slate-900;
+  @apply dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100;
+}
+
 .trust-path-mermaid {
   width: min(100%, 56rem);
   margin-left: auto;
