@@ -139,9 +139,12 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build and render the chain graph starting from the uploaded certificate
+	// ShowNonChainCerts is always true for manual mode — expanding the trust path
+	// via the DB is the primary purpose of this feature.
+	// ShowExpired is driven by the user's checkbox selection.
 	filters := ChainGraphFilters{
 		ShowNonChainCerts: true,
-		ShowExpired:       true,
+		ShowExpired:       r.FormValue("showExpired") == "true",
 	}
 
 	subjectCN := extractCN(certInfo.Subject)
