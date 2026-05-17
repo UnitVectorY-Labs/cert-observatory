@@ -3,31 +3,171 @@ package web
 import (
 	"context"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
+	"html"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/UnitVectorY-Labs/cert-observatory/internal/certutil"
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/domain"
 )
 
 // IndexData is the view model for the index page.
 type IndexData struct {
-	Results *ResultsViewData
-	Error   *ErrorData
+	Results    *ResultsViewData
+	Error      *ErrorData
+	ManualMode bool
 }
 
 // handleIndex serves the main page (GET only, read-only, never triggers crawl).
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{}); err != nil {
+	_, manualMode := r.URL.Query()["manual"]
+	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{ManualMode: manualMode}); err != nil {
 		s.logger.Error("failed to render index", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
-// isHTMXRequest checks if the request is an HTMX request.
+// handleManualCert handles manual PEM certificate upload (POST only).
+// This is a "secret" feature unlocked by visiting /?manual.
+func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		s.renderManualError(w, r, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
+		return
+	}
+
+	pemText := strings.TrimSpace(r.FormValue("pem"))
+	if pemText == "" {
+		s.renderManualError(w, r, "No Certificate", "Please paste a PEM-encoded certificate.", http.StatusBadRequest)
+		return
+	}
+
+	// Decode the PEM block
+	block, rest := pem.Decode([]byte(pemText))
+	if block == nil {
+		s.renderManualError(w, r, "Invalid PEM", "Could not decode PEM data. Please provide a valid PEM-encoded certificate.", http.StatusBadRequest)
+		return
+	}
+	if block.Type != "CERTIFICATE" {
+		s.renderManualError(w, r, "Invalid PEM", fmt.Sprintf("Expected a CERTIFICATE block, got %q.", block.Type), http.StatusBadRequest)
+		return
+	}
+	// Only one certificate is allowed — reject any additional PEM blocks of any type or non-whitespace junk
+	if extraBlock, _ := pem.Decode(rest); extraBlock != nil {
+		s.renderManualError(w, r, "Multiple PEM Blocks", "Only a single PEM certificate block is allowed. Please provide exactly one certificate.", http.StatusBadRequest)
+		return
+	}
+	if len(strings.TrimSpace(string(rest))) > 0 {
+		s.renderManualError(w, r, "Unexpected Data", "Only a single PEM certificate is allowed. Please remove any trailing data after the certificate.", http.StatusBadRequest)
+		return
+	}
+
+	// Parse the DER bytes
+	x509Cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		s.renderManualError(w, r, "Invalid Certificate", "Could not parse the certificate: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	certInfo := certutil.ParseX509Certificate(x509Cert)
+
+	// Build a CertificateResult from the parsed certificate
+	uploaded := &CertificateResult{
+		CertHash:  certInfo.CertHash,
+		DER:       certInfo.DER,
+		PEM:       certInfo.PEM(),
+		Subject:   certInfo.Subject,
+		Issuer:    certInfo.Issuer,
+		NotBefore: certInfo.NotBefore,
+		NotAfter:  certInfo.NotAfter,
+		SKI:       certInfo.SKI,
+		AKI:       certInfo.AKI,
+		Parsed:    certInfo.Parsed,
+		Position:  1,
+	}
+
+	// Validate: the certificate MUST be signed by a trusted cert already in the DB.
+	// Self-signed certificates are not accepted unless they are already a trusted root in the DB
+	// that signs themselves (which would be found as their own issuer, but self-signed uploads
+	// are rejected per spec - "it MUST be valid" means issued by something trusted).
+	if isSignatureSelfSigned(uploaded) {
+		s.renderManualError(w, r, "Self-Signed Certificate", "Self-signed certificates cannot be uploaded via manual import. The certificate must be signed by a trusted certificate already in the database.", http.StatusBadRequest)
+		return
+	}
+
+	// Look up valid issuers from the DB using AKI→SKI matching + signature verification
+	if len(uploaded.AKI) == 0 {
+		s.renderManualError(w, r, "Untrusted Certificate", "The certificate does not have an Authority Key Identifier (AKI) extension. Cannot verify its issuer.", http.StatusBadRequest)
+		return
+	}
+
+	candidates, err := s.repo.FindCertificatesBySKI(r.Context(), uploaded.AKI)
+	if err != nil {
+		s.logger.Error("failed to look up issuer candidates", "error", err)
+		s.renderManualError(w, r, "Database Error", "Could not look up issuer certificates.", http.StatusInternalServerError)
+		return
+	}
+
+	trusted := false
+	for _, candidate := range candidates {
+		if candidate.Parsed == nil {
+			continue
+		}
+		// CheckSignatureFrom validates the signature AND enforces that the candidate
+		// is a CA certificate (IsCA=true with KeyUsageCertSign where relevant).
+		if err := x509Cert.CheckSignatureFrom(candidate.Parsed); err == nil {
+			trusted = true
+			break
+		}
+	}
+
+	if !trusted {
+		s.renderManualError(w, r, "Untrusted Certificate", "The certificate is not signed by any trusted certificate in the database. Only certificates with a valid chain of trust can be uploaded.", http.StatusBadRequest)
+		return
+	}
+
+	// Store the certificate in the database
+	if err := s.repo.StoreCertificate(r.Context(), uploaded); err != nil {
+		s.logger.Error("failed to store manual certificate", "error", err)
+		s.renderManualError(w, r, "Storage Error", "Could not store the certificate.", http.StatusInternalServerError)
+		return
+	}
+
+	// Build and render the chain graph starting from the uploaded certificate
+	filters := ChainGraphFilters{
+		ShowNonChainCerts: true,
+		ShowExpired:       true,
+	}
+
+	subjectCN := extractCN(certInfo.Subject)
+	if subjectCN == "" {
+		subjectCN = certInfo.Subject
+	}
+
+	data := &ResultsViewData{
+		Domain:   subjectCN,
+		IsManual: true,
+	}
+	viewData := certToViewData(uploaded)
+	// Assign an appropriate label based on the actual certificate type rather than
+	// defaulting to "Server Certificate" (which is misleading for CA/intermediate certs).
+	if viewData.IsSelfSigned {
+		viewData.CertLabel = "Self Signed Certificate"
+	} else if viewData.IsCA {
+		viewData.CertLabel = "Intermediate CA"
+	} else {
+		viewData.CertLabel = "End-Entity Certificate"
+	}
+	data.Chain = []*CertViewData{viewData}
+	data.ChainGraph = buildChainGraph(r.Context(), s.repo, []*CertificateResult{uploaded}, filters)
+
+	s.renderManualResults(w, r, data)
+}
 func isHTMXRequest(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }
@@ -311,7 +451,30 @@ func (s *Server) renderReservedDomainError(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// renderCachedResults renders cached results.
+// renderManualError renders an error in the context of the manual upload page.
+func (s *Server) renderManualError(w http.ResponseWriter, r *http.Request, title, message string, status int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+
+	errData := &ErrorData{
+		Title:   title,
+		Message: message,
+	}
+
+	if isHTMXRequest(r) {
+		if err := s.templates.ExecuteTemplate(w, "error", errData); err != nil {
+			s.logger.Error("failed to render error template", "error", err)
+			fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", html.EscapeString(title), html.EscapeString(message))
+		}
+		return
+	}
+
+	pageData := &IndexData{Error: errData, ManualMode: true}
+	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
+		s.logger.Error("failed to render error page", "error", err)
+		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", html.EscapeString(title), html.EscapeString(message))
+	}
+}
 func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, result *DomainResult, lastCrawlFailed bool, filters ChainGraphFilters) {
 	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
 
@@ -365,6 +528,27 @@ func (s *Server) renderResults(w http.ResponseWriter, r *http.Request, data *Res
 	pageData := &IndexData{Results: data}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render full page with results", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// renderManualResults renders manual import results, keeping ManualMode=true for full-page responses.
+func (s *Server) renderManualResults(w http.ResponseWriter, r *http.Request, data *ResultsViewData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// If HTMX request, render just the results fragment
+	if isHTMXRequest(r) {
+		if err := s.templates.ExecuteTemplate(w, "results", data); err != nil {
+			s.logger.Error("failed to render manual results", "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// For full-page responses keep ManualMode=true so the PEM textarea is shown again
+	pageData := &IndexData{Results: data, ManualMode: true}
+	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
+		s.logger.Error("failed to render manual full page with results", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
