@@ -5,6 +5,7 @@ package domain
 import (
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -18,6 +19,8 @@ var (
 	ErrDomainHasScheme = errors.New("domain must not contain a URL scheme (e.g., https://)")
 	// ErrDomainHasPort indicates the input contains a port specification
 	ErrDomainHasPort = errors.New("domain must not contain a port")
+	// ErrInvalidPort indicates the input contains an invalid port specification
+	ErrInvalidPort = errors.New("invalid port")
 	// ErrDomainHasPath indicates the input contains a path
 	ErrDomainHasPath = errors.New("domain must not contain a path")
 	// ErrDomainHasQuery indicates the input contains a query string
@@ -33,6 +36,14 @@ var (
 	// ErrDomainLabelTooLong indicates a label exceeds 63 characters
 	ErrDomainLabelTooLong = errors.New("domain label exceeds maximum length of 63 characters")
 )
+
+const DefaultPort = 443
+
+// Target is a normalized TLS crawl target.
+type Target struct {
+	Domain string
+	Port   int
+}
 
 // validHostnameChars matches valid hostname characters (alphanumeric, hyphen)
 var validHostnameChars = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
@@ -62,27 +73,38 @@ var schemePattern = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://`)
 //   - Must contain only valid hostname characters
 //   - Each label must be 1-63 characters
 func NormalizeAndValidate(input string) (string, error) {
+	target, err := NormalizeAndValidateTarget(input, false)
+	if err != nil {
+		return "", err
+	}
+	return target.Domain, nil
+}
+
+// NormalizeAndValidateTarget takes a raw domain input, normalizes it, and
+// validates it as a TLS target. When allowPort is true, the input may include a
+// numeric port using host:port syntax.
+func NormalizeAndValidateTarget(input string, allowPort bool) (*Target, error) {
 	// Normalize: trim whitespace
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
-		return "", ErrEmptyDomain
+		return nil, ErrEmptyDomain
 	}
 
 	// Check for control characters before any other processing
 	for _, r := range trimmed {
 		if unicode.IsControl(r) {
-			return "", ErrDomainControlChars
+			return nil, ErrDomainControlChars
 		}
 	}
 
 	// Check for whitespace in the middle
 	if strings.ContainsAny(trimmed, " \t\n\r") {
-		return "", ErrDomainInvalidChars
+		return nil, ErrDomainInvalidChars
 	}
 
 	// Check for URL scheme
 	if schemePattern.MatchString(trimmed) {
-		return "", ErrDomainHasScheme
+		return nil, ErrDomainHasScheme
 	}
 
 	// Also check for common schemes without the full regex (e.g., "http://", "https://")
@@ -90,22 +112,31 @@ func NormalizeAndValidate(input string) (string, error) {
 	if strings.HasPrefix(lowerTrimmed, "http://") ||
 		strings.HasPrefix(lowerTrimmed, "https://") ||
 		strings.HasPrefix(lowerTrimmed, "ftp://") {
-		return "", ErrDomainHasScheme
+		return nil, ErrDomainHasScheme
 	}
 
 	// Check for path (contains /)
 	if strings.Contains(trimmed, "/") {
-		return "", ErrDomainHasPath
+		return nil, ErrDomainHasPath
 	}
 
 	// Check for query string
 	if strings.Contains(trimmed, "?") {
-		return "", ErrDomainHasQuery
+		return nil, ErrDomainHasQuery
 	}
 
-	// Check for port (contains :)
+	port := DefaultPort
+
 	if strings.Contains(trimmed, ":") {
-		return "", ErrDomainHasPort
+		if !allowPort {
+			return nil, ErrDomainHasPort
+		}
+		host, parsedPort, err := splitHostPort(trimmed)
+		if err != nil {
+			return nil, err
+		}
+		trimmed = host
+		port = parsedPort
 	}
 
 	// Normalize: convert to lowercase
@@ -113,40 +144,58 @@ func NormalizeAndValidate(input string) (string, error) {
 
 	// Check for trailing dot
 	if strings.HasSuffix(normalized, ".") {
-		return "", ErrDomainTrailingDot
+		return nil, ErrDomainTrailingDot
 	}
 
 	// Check total length
 	if len(normalized) > 253 {
-		return "", ErrDomainTooLong
+		return nil, ErrDomainTooLong
 	}
 
 	// Validate each label
 	labels := strings.Split(normalized, ".")
 	for _, label := range labels {
 		if len(label) == 0 {
-			return "", ErrDomainInvalidLabel
+			return nil, ErrDomainInvalidLabel
 		}
 		if len(label) > 63 {
-			return "", ErrDomainLabelTooLong
+			return nil, ErrDomainLabelTooLong
 		}
 
 		// Check that label matches valid hostname pattern
 		if len(label) == 1 {
 			if !singleCharLabel.MatchString(label) {
-				return "", ErrDomainInvalidChars
+				return nil, ErrDomainInvalidChars
 			}
 		} else {
 			if !validHostnameChars.MatchString(label) {
-				return "", ErrDomainInvalidChars
+				return nil, ErrDomainInvalidChars
 			}
 		}
 
 		// Labels cannot start or end with hyphen
 		if strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
-			return "", ErrDomainInvalidLabel
+			return nil, ErrDomainInvalidLabel
 		}
 	}
 
-	return normalized, nil
+	return &Target{Domain: normalized, Port: port}, nil
+}
+
+func splitHostPort(input string) (string, int, error) {
+	if strings.Count(input, ":") != 1 {
+		return "", 0, ErrDomainHasPort
+	}
+
+	parts := strings.SplitN(input, ":", 2)
+	if parts[0] == "" || parts[1] == "" {
+		return "", 0, ErrInvalidPort
+	}
+
+	port, err := strconv.Atoi(parts[1])
+	if err != nil || port < 1 || port > 65535 {
+		return "", 0, ErrInvalidPort
+	}
+
+	return parts[0], port, nil
 }

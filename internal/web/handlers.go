@@ -22,13 +22,15 @@ type IndexData struct {
 	Results    *ResultsViewData
 	Error      *ErrorData
 	ManualMode bool
+	PortMode   bool
 }
 
 // handleIndex serves the main page (GET only, read-only, never triggers crawl).
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, manualMode := r.URL.Query()["manual"]
-	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{ManualMode: manualMode}); err != nil {
+	portMode := r.URL.Query().Has("port")
+	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{ManualMode: manualMode, PortMode: portMode}); err != nil {
 		s.logger.Error("failed to render index", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -190,11 +192,13 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rawDomain := r.FormValue("domain")
-	normalizedDomain, err := domain.NormalizeAndValidate(rawDomain)
+	target, err := domain.NormalizeAndValidateTarget(rawDomain, r.URL.Query().Has("port"))
 	if err != nil {
 		s.renderError(w, r, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
 		return
 	}
+	normalizedDomain := target.Domain
+	port := target.Port
 
 	// Parse filter options
 	filters := parseChainGraphFilters(r)
@@ -212,13 +216,13 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if we need to crawl or can use cached data
-	canRefresh, _, err := s.repo.CanStandardRefresh(r.Context(), normalizedDomain, s.config.StandardRefreshWindow)
+	canRefresh, _, err := s.repo.CanStandardRefreshForPort(r.Context(), normalizedDomain, port, s.config.StandardRefreshWindow)
 	if err != nil {
 		s.logger.Error("failed to check refresh eligibility", "domain", normalizedDomain, "error", err)
 	}
 
 	// Try to get existing data first
-	domainResult, err := s.repo.GetDomainWithChain(r.Context(), normalizedDomain)
+	domainResult, err := s.repo.GetDomainWithChainForPort(r.Context(), normalizedDomain, port)
 
 	if err == nil && domainResult != nil && domainResult.HasChain && !canRefresh {
 		// Use cached data
@@ -227,7 +231,7 @@ func (s *Server) handleInspect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Need to crawl
-	result, crawlErr := s.performCrawl(r.Context(), normalizedDomain, false)
+	result, crawlErr := s.performCrawl(r.Context(), normalizedDomain, port, false)
 	if crawlErr != nil {
 		s.logger.Warn("crawl failed", "domain", normalizedDomain, "error", crawlErr)
 
@@ -253,11 +257,13 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rawDomain := r.FormValue("domain")
-	normalizedDomain, err := domain.NormalizeAndValidate(rawDomain)
+	target, err := domain.NormalizeAndValidateTarget(rawDomain, r.URL.Query().Has("port"))
 	if err != nil {
 		s.renderError(w, r, "Invalid Domain", formatDomainError(err), http.StatusBadRequest)
 		return
 	}
+	normalizedDomain := target.Domain
+	port := target.Port
 
 	// Use default filters for refresh (show everything)
 	// Note: Force refresh intentionally shows all certificates to give users
@@ -269,7 +275,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if forced refresh is allowed
-	canForce, waitTime, err := s.repo.CanForcedRefresh(r.Context(), normalizedDomain, s.config.ForcedRefreshWindow)
+	canForce, waitTime, err := s.repo.CanForcedRefreshForPort(r.Context(), normalizedDomain, port, s.config.ForcedRefreshWindow)
 	if err != nil {
 		s.logger.Error("failed to check forced refresh eligibility", "domain", normalizedDomain, "error", err)
 		s.renderError(w, r, "Error", "Could not verify refresh eligibility.", http.StatusInternalServerError)
@@ -282,12 +288,12 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Perform forced crawl
-	result, crawlErr := s.performCrawl(r.Context(), normalizedDomain, true)
+	result, crawlErr := s.performCrawl(r.Context(), normalizedDomain, port, true)
 	if crawlErr != nil {
 		s.logger.Warn("forced crawl failed", "domain", normalizedDomain, "error", crawlErr)
 
 		// Try to get cached data
-		domainResult, _ := s.repo.GetDomainWithChain(r.Context(), normalizedDomain)
+		domainResult, _ := s.repo.GetDomainWithChainForPort(r.Context(), normalizedDomain, port)
 		if domainResult != nil && domainResult.HasChain {
 			s.renderCachedResultsWithError(w, r, domainResult, crawlErr, filters)
 			return
@@ -331,12 +337,12 @@ func (s *Server) handleCertDetails(w http.ResponseWriter, r *http.Request) {
 }
 
 // performCrawl executes a crawl with locking.
-func (s *Server) performCrawl(ctx context.Context, domainName string, forced bool) (*CrawlOutput, error) {
+func (s *Server) performCrawl(ctx context.Context, domainName string, port int, forced bool) (*CrawlOutput, error) {
 	lockID := generateLockID()
 	lockTTL := s.config.CrawlTimeout + 10*time.Second
 
 	// Try to acquire lock
-	acquired, err := s.repo.AcquireLock(ctx, domainName, lockID, lockTTL)
+	acquired, err := s.repo.AcquireLockForPort(ctx, domainName, port, lockID, lockTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire lock: %w", err)
 	}
@@ -344,11 +350,12 @@ func (s *Server) performCrawl(ctx context.Context, domainName string, forced boo
 	if !acquired {
 		// Another crawl is in progress, wait a bit and try to get cached results
 		time.Sleep(2 * time.Second)
-		domainResult, err := s.repo.GetDomainWithChain(ctx, domainName)
+		domainResult, err := s.repo.GetDomainWithChainForPort(ctx, domainName, port)
 		if err == nil && domainResult != nil && domainResult.HasChain {
 			// Return the cached data as if it was a fresh crawl
 			return &CrawlOutput{
 				Domain: domainName,
+				Port:   port,
 				Chain:  domainResult.Chain,
 			}, nil
 		}
@@ -357,7 +364,7 @@ func (s *Server) performCrawl(ctx context.Context, domainName string, forced boo
 
 	// Ensure lock is released
 	defer func() {
-		if err := s.repo.ReleaseLock(ctx, domainName, lockID); err != nil {
+		if err := s.repo.ReleaseLockForPort(ctx, domainName, port, lockID); err != nil {
 			s.logger.Warn("failed to release lock", "domain", domainName, "error", err)
 		}
 	}()
@@ -367,11 +374,12 @@ func (s *Server) performCrawl(ctx context.Context, domainName string, forced boo
 	defer cancel()
 
 	// Perform crawl
-	result, err := s.crawler.Crawl(crawlCtx, domainName)
+	result, err := s.crawler.CrawlPort(crawlCtx, domainName, port)
 	if err != nil {
 		// Record failure
 		s.repo.RecordCrawlResult(ctx, &CrawlResultInput{
 			Domain:  domainName,
+			Port:    port,
 			Success: false,
 			Forced:  forced,
 		})
@@ -381,6 +389,7 @@ func (s *Server) performCrawl(ctx context.Context, domainName string, forced boo
 	// Record success
 	if err := s.repo.RecordCrawlResult(ctx, &CrawlResultInput{
 		Domain:  domainName,
+		Port:    port,
 		Success: true,
 		Forced:  forced,
 		Chain:   result.Chain,
@@ -486,13 +495,13 @@ func (s *Server) renderManualError(w http.ResponseWriter, r *http.Request, title
 	}
 }
 func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, result *DomainResult, lastCrawlFailed bool, filters ChainGraphFilters) {
-	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
+	canForce, waitTime, _ := s.repo.CanForcedRefreshForPort(r.Context(), result.Domain, result.Port, s.config.ForcedRefreshWindow)
 
 	data := buildResultsViewData(result, true, canForce, waitTime, lastCrawlFailed)
 
 	// Build the chain graph from the chain certificates
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain, filters)
-	data.DownloadURL = buildNormalDownloadURL(result.Domain, filters)
+	data.DownloadURL = buildNormalDownloadURL(result.Domain, result.Port, filters)
 
 	s.renderResults(w, r, data)
 }
@@ -507,18 +516,19 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 	// Convert crawl output to domain result format
 	domainResult := &DomainResult{
 		Domain:    result.Domain,
+		Port:      result.Port,
 		HasChain:  len(result.Chain) > 0,
 		Chain:     result.Chain,
 		UpdatedAt: time.Now(),
 	}
 
-	canForce, waitTime, _ := s.repo.CanForcedRefresh(r.Context(), result.Domain, s.config.ForcedRefreshWindow)
+	canForce, waitTime, _ := s.repo.CanForcedRefreshForPort(r.Context(), result.Domain, result.Port, s.config.ForcedRefreshWindow)
 
 	data := buildResultsViewData(domainResult, false, canForce, waitTime, false)
 
 	// Build the chain graph from the chain certificates
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain, filters)
-	data.DownloadURL = buildNormalDownloadURL(result.Domain, filters)
+	data.DownloadURL = buildNormalDownloadURL(result.Domain, result.Port, filters)
 
 	s.renderResults(w, r, data)
 }
@@ -618,6 +628,8 @@ func formatDomainError(err error) string {
 		return "Please enter just the domain name without http:// or https://."
 	case domain.ErrDomainHasPort:
 		return "Please enter just the domain name without a port number."
+	case domain.ErrInvalidPort:
+		return "Port must be a number between 1 and 65535."
 	case domain.ErrDomainHasPath:
 		return "Please enter just the domain name without any path."
 	case domain.ErrDomainHasQuery:
@@ -635,7 +647,7 @@ func formatCrawlError(err error) string {
 		return "Connection failed. The server may be unreachable."
 	}
 	if strings.Contains(errStr, "tls handshake") {
-		return "TLS handshake failed. The server may not support TLS on port 443."
+		return "TLS handshake failed. The server may not support TLS on the requested port."
 	}
 	if strings.Contains(errStr, "no certificates") {
 		return "No certificates were returned by the server."
@@ -661,9 +673,12 @@ func formatDuration(d time.Duration) string {
 }
 
 // buildNormalDownloadURL constructs the server-side download URL for a domain.
-func buildNormalDownloadURL(domainName string, filters ChainGraphFilters) string {
+func buildNormalDownloadURL(domainName string, port int, filters ChainGraphFilters) string {
 	params := url.Values{}
 	params.Set("domain", domainName)
+	if port != 0 && port != 443 {
+		params.Set("port", fmt.Sprintf("%d", port))
+	}
 	if filters.ShowNonChainCerts {
 		params.Set("showNonChainCerts", "true")
 	}
@@ -710,12 +725,19 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	var filenameBase string
 
 	if domainParam != "" {
-		normalizedDomain, err := domain.NormalizeAndValidate(domainParam)
+		target, err := domain.NormalizeAndValidateTarget(domainParam, false)
 		if err != nil {
 			http.Error(w, "Invalid domain", http.StatusBadRequest)
 			return
 		}
-		domainResult, err := s.repo.GetDomainWithChain(r.Context(), normalizedDomain)
+		if portParam := r.URL.Query().Get("port"); portParam != "" {
+			target, err = domain.NormalizeAndValidateTarget(domainParam+":"+portParam, true)
+			if err != nil {
+				http.Error(w, "Invalid port", http.StatusBadRequest)
+				return
+			}
+		}
+		domainResult, err := s.repo.GetDomainWithChainForPort(r.Context(), target.Domain, target.Port)
 		if err != nil || domainResult == nil || !domainResult.HasChain {
 			http.Error(w, "Domain not found", http.StatusNotFound)
 			return
@@ -725,7 +747,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 			ShowNonChainCerts: r.URL.Query().Get("showNonChainCerts") == "true",
 			ShowExpired:       r.URL.Query().Get("showExpired") == "true",
 		}
-		filenameBase = normalizedDomain
+		filenameBase = formatTarget(target.Domain, target.Port)
 	} else if certHashHex != "" {
 		hash, err := hex.DecodeString(certHashHex)
 		if err != nil || len(hash) != 32 {
@@ -779,6 +801,6 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/x-pem-file")
 	// sanitizeDownloadFilename strips all characters that could break the quoted filename
 	// parameter; the explicit quote escaping here adds a defense-in-depth layer.
-	w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filename, `"`, `\"`)+ `"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filename, `"`, `\"`)+`"`)
 	fmt.Fprint(w, buf.String())
 }

@@ -33,10 +33,14 @@ type mockRepository struct {
 }
 
 func (m *mockRepository) GetDomainWithChain(ctx context.Context, domain string) (*DomainResult, error) {
+	return m.GetDomainWithChainForPort(ctx, domain, 443)
+}
+
+func (m *mockRepository) GetDomainWithChainForPort(ctx context.Context, domain string, port int) (*DomainResult, error) {
 	if m.domainResult != nil && m.domainResult.Domain == domain {
 		return m.domainResult, nil
 	}
-	return &DomainResult{Domain: domain}, nil
+	return &DomainResult{Domain: domain, Port: port}, nil
 }
 
 func (m *mockRepository) GetCertificateByHash(ctx context.Context, hash []byte) (*CertificateResult, error) {
@@ -51,18 +55,34 @@ func (m *mockRepository) FindCertificatesBySKI(ctx context.Context, ski []byte) 
 }
 
 func (m *mockRepository) CanStandardRefresh(ctx context.Context, domain string, window time.Duration) (bool, time.Duration, error) {
+	return m.CanStandardRefreshForPort(ctx, domain, 443, window)
+}
+
+func (m *mockRepository) CanStandardRefreshForPort(ctx context.Context, domain string, port int, window time.Duration) (bool, time.Duration, error) {
 	return m.canStandard, m.standardWait, nil
 }
 
 func (m *mockRepository) CanForcedRefresh(ctx context.Context, domain string, window time.Duration) (bool, time.Duration, error) {
+	return m.CanForcedRefreshForPort(ctx, domain, 443, window)
+}
+
+func (m *mockRepository) CanForcedRefreshForPort(ctx context.Context, domain string, port int, window time.Duration) (bool, time.Duration, error) {
 	return m.canForced, m.forcedWait, nil
 }
 
 func (m *mockRepository) AcquireLock(ctx context.Context, domain string, lockID string, ttl time.Duration) (bool, error) {
+	return m.AcquireLockForPort(ctx, domain, 443, lockID, ttl)
+}
+
+func (m *mockRepository) AcquireLockForPort(ctx context.Context, domain string, port int, lockID string, ttl time.Duration) (bool, error) {
 	return m.lockAcquired, nil
 }
 
 func (m *mockRepository) ReleaseLock(ctx context.Context, domain string, lockID string) error {
+	return m.ReleaseLockForPort(ctx, domain, 443, lockID)
+}
+
+func (m *mockRepository) ReleaseLockForPort(ctx context.Context, domain string, port int, lockID string) error {
 	return nil
 }
 
@@ -82,6 +102,10 @@ type mockCrawler struct {
 }
 
 func (m *mockCrawler) Crawl(ctx context.Context, domain string) (*CrawlOutput, error) {
+	return m.CrawlPort(ctx, domain, 443)
+}
+
+func (m *mockCrawler) CrawlPort(ctx context.Context, domain string, port int) (*CrawlOutput, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -90,6 +114,7 @@ func (m *mockCrawler) Crawl(ctx context.Context, domain string) (*CrawlOutput, e
 	}
 	return &CrawlOutput{
 		Domain: domain,
+		Port:   port,
 		Chain: []*CertificateResult{
 			{
 				CertHash:  make([]byte, 32),
@@ -142,6 +167,33 @@ func TestHandleIndex(t *testing.T) {
 	}
 }
 
+func TestHandleIndex_PortModePreservesInspectQuery(t *testing.T) {
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?port", nil)
+	w := httptest.NewRecorder()
+
+	server.handleIndex(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, `action="/inspect?port"`) {
+		t.Errorf("expected inspect form action to preserve port mode, got: %s", body)
+	}
+	if !strings.Contains(body, `hx-post="/inspect?port"`) {
+		t.Errorf("expected HTMX post target to preserve port mode, got: %s", body)
+	}
+}
+
 func TestHandleInspect_ValidDomain(t *testing.T) {
 	repo := &mockRepository{
 		canStandard:  true,
@@ -168,6 +220,40 @@ func TestHandleInspect_ValidDomain(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+}
+
+func TestHandleInspect_ValidDomainWithPortMode(t *testing.T) {
+	repo := &mockRepository{
+		canStandard:  true,
+		canForced:    true,
+		lockAcquired: true,
+	}
+	crawler := &mockCrawler{}
+
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("domain", "smtp.gmail.com:465")
+
+	req := httptest.NewRequest(http.MethodPost, "/inspect?port", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	server.handleInspect(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+	if len(repo.crawlResults) != 1 {
+		t.Fatalf("expected one crawl result, got %d", len(repo.crawlResults))
+	}
+	if repo.crawlResults[0].Domain != "smtp.gmail.com" || repo.crawlResults[0].Port != 465 {
+		t.Fatalf("expected crawl result for smtp.gmail.com:465, got %s:%d", repo.crawlResults[0].Domain, repo.crawlResults[0].Port)
 	}
 }
 
@@ -208,6 +294,9 @@ func TestHandleInspect_InvalidDomain(t *testing.T) {
 			body := w.Body.String()
 			if !strings.Contains(strings.ToLower(body), strings.ToLower(tt.wantErr)) {
 				t.Errorf("Expected error containing %q, got: %s", tt.wantErr, body)
+			}
+			if tt.name == "domain with port" && strings.Contains(body, "?port") {
+				t.Errorf("port-mode error should not disclose hidden query parameter, got: %s", body)
 			}
 		})
 	}
@@ -512,147 +601,147 @@ func TestHandleInspect_ReservedDomain(t *testing.T) {
 
 // generateTestCA creates a self-signed CA certificate and returns the CA cert and signing key.
 func generateTestCA(t *testing.T) (*x509.Certificate, *ecdsa.PrivateKey) {
-t.Helper()
-caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-t.Fatalf("generate CA key: %v", err)
-}
-ski := make([]byte, 20)
-if _, err := rand.Read(ski); err != nil {
-t.Fatalf("generate SKI: %v", err)
-}
-tmpl := &x509.Certificate{
-SerialNumber:          big.NewInt(1),
-Subject:               pkix.Name{CommonName: "Test Root CA"},
-NotBefore:             time.Now().Add(-24 * time.Hour),
-NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
-IsCA:                  true,
-BasicConstraintsValid: true,
-KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-SubjectKeyId:          ski,
-}
-der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &caKey.PublicKey, caKey)
-if err != nil {
-t.Fatalf("create CA cert: %v", err)
-}
-cert, err := x509.ParseCertificate(der)
-if err != nil {
-t.Fatalf("parse CA cert: %v", err)
-}
-return cert, caKey
+	t.Helper()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate CA key: %v", err)
+	}
+	ski := make([]byte, 20)
+	if _, err := rand.Read(ski); err != nil {
+		t.Fatalf("generate SKI: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test Root CA"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		SubjectKeyId:          ski,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create CA cert: %v", err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parse CA cert: %v", err)
+	}
+	return cert, caKey
 }
 
 // generateTestLeaf creates a leaf certificate signed by the given CA.
 func generateTestLeaf(t *testing.T, caCert *x509.Certificate, caKey *ecdsa.PrivateKey) *x509.Certificate {
-t.Helper()
-leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-t.Fatalf("generate leaf key: %v", err)
-}
-tmpl := &x509.Certificate{
-SerialNumber:          big.NewInt(2),
-Subject:               pkix.Name{CommonName: "test.example.com"},
-NotBefore:             time.Now().Add(-24 * time.Hour),
-NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-KeyUsage:              x509.KeyUsageDigitalSignature,
-BasicConstraintsValid: true,
-AuthorityKeyId:        caCert.SubjectKeyId,
-}
-der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &leafKey.PublicKey, caKey)
-if err != nil {
-t.Fatalf("create leaf cert: %v", err)
-}
-cert, err := x509.ParseCertificate(der)
-if err != nil {
-t.Fatalf("parse leaf cert: %v", err)
-}
-return cert
+	t.Helper()
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate leaf key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "test.example.com"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		AuthorityKeyId:        caCert.SubjectKeyId,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &leafKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create leaf cert: %v", err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parse leaf cert: %v", err)
+	}
+	return cert
 }
 
 // pemEncodeTest encodes a DER certificate as PEM for testing.
 func pemEncodeTest(der []byte) string {
-return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 }
 
 func TestHandleManualCert_EmptyPEM(t *testing.T) {
-repo := &mockRepository{}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", "")
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", "")
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusBadRequest {
-t.Errorf("expected 400, got %d", w.Code)
-}
-if !strings.Contains(w.Body.String(), "No Certificate") {
-t.Error("expected 'No Certificate' error")
-}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "No Certificate") {
+		t.Error("expected 'No Certificate' error")
+	}
 }
 
 func TestHandleManualCert_InvalidPEM(t *testing.T) {
-repo := &mockRepository{}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", "not a pem certificate")
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", "not a pem certificate")
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusBadRequest {
-t.Errorf("expected 400, got %d", w.Code)
-}
-if !strings.Contains(w.Body.String(), "Invalid PEM") {
-t.Error("expected 'Invalid PEM' error")
-}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Invalid PEM") {
+		t.Error("expected 'Invalid PEM' error")
+	}
 }
 
 func TestHandleManualCert_SelfSigned(t *testing.T) {
-caCert, _ := generateTestCA(t)
+	caCert, _ := generateTestCA(t)
 
-// No cross-signed equivalent in the DB → trust lookup finds nothing → Untrusted.
-repo := &mockRepository{}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	// No cross-signed equivalent in the DB → trust lookup finds nothing → Untrusted.
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", pemEncodeTest(caCert.Raw))
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", pemEncodeTest(caCert.Raw))
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusBadRequest {
-t.Errorf("expected 400, got %d", w.Code)
-}
-if !strings.Contains(w.Body.String(), "Untrusted") {
-t.Errorf("expected untrusted error for self-signed cert with no DB match, got: %s", w.Body.String())
-}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Untrusted") {
+		t.Errorf("expected untrusted error for self-signed cert with no DB match, got: %s", w.Body.String())
+	}
 }
 
 // generateCrossSignedCA creates two certificates for the same key pair:
@@ -662,269 +751,269 @@ t.Errorf("expected untrusted error for self-signed cert with no DB match, got: %
 // This mirrors real-world cross-signing where a CA key is vouched for by an
 // already-trusted root.
 func generateCrossSignedCA(t *testing.T, trustedParent *x509.Certificate, trustedParentKey *ecdsa.PrivateKey) (selfSigned *x509.Certificate, crossSigned *x509.Certificate) {
-t.Helper()
-// Key for the new CA
-newKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-t.Fatalf("generate new CA key: %v", err)
-}
-ski := make([]byte, 20)
-if _, err := rand.Read(ski); err != nil {
-t.Fatalf("generate SKI: %v", err)
-}
+	t.Helper()
+	// Key for the new CA
+	newKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate new CA key: %v", err)
+	}
+	ski := make([]byte, 20)
+	if _, err := rand.Read(ski); err != nil {
+		t.Fatalf("generate SKI: %v", err)
+	}
 
-// Self-signed version (Subject == Issuer)
-selfTmpl := &x509.Certificate{
-SerialNumber:          big.NewInt(10),
-Subject:               pkix.Name{CommonName: "New Cross-Signed Root CA"},
-NotBefore:             time.Now().Add(-24 * time.Hour),
-NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
-IsCA:                  true,
-BasicConstraintsValid: true,
-KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-SubjectKeyId:          ski,
-}
-selfDER, err := x509.CreateCertificate(rand.Reader, selfTmpl, selfTmpl, &newKey.PublicKey, newKey)
-if err != nil {
-t.Fatalf("create self-signed cert: %v", err)
-}
-selfSigned, err = x509.ParseCertificate(selfDER)
-if err != nil {
-t.Fatalf("parse self-signed cert: %v", err)
-}
+	// Self-signed version (Subject == Issuer)
+	selfTmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(10),
+		Subject:               pkix.Name{CommonName: "New Cross-Signed Root CA"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		SubjectKeyId:          ski,
+	}
+	selfDER, err := x509.CreateCertificate(rand.Reader, selfTmpl, selfTmpl, &newKey.PublicKey, newKey)
+	if err != nil {
+		t.Fatalf("create self-signed cert: %v", err)
+	}
+	selfSigned, err = x509.ParseCertificate(selfDER)
+	if err != nil {
+		t.Fatalf("parse self-signed cert: %v", err)
+	}
 
-// Cross-signed version (same key/subject, but issued and signed by trustedParent)
-crossTmpl := &x509.Certificate{
-SerialNumber:          big.NewInt(11),
-Subject:               pkix.Name{CommonName: "New Cross-Signed Root CA"},
-NotBefore:             time.Now().Add(-24 * time.Hour),
-NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
-IsCA:                  true,
-BasicConstraintsValid: true,
-KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-SubjectKeyId:          ski,
-AuthorityKeyId:        trustedParent.SubjectKeyId,
-}
-crossDER, err := x509.CreateCertificate(rand.Reader, crossTmpl, trustedParent, &newKey.PublicKey, trustedParentKey)
-if err != nil {
-t.Fatalf("create cross-signed cert: %v", err)
-}
-crossSigned, err = x509.ParseCertificate(crossDER)
-if err != nil {
-t.Fatalf("parse cross-signed cert: %v", err)
-}
+	// Cross-signed version (same key/subject, but issued and signed by trustedParent)
+	crossTmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(11),
+		Subject:               pkix.Name{CommonName: "New Cross-Signed Root CA"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		SubjectKeyId:          ski,
+		AuthorityKeyId:        trustedParent.SubjectKeyId,
+	}
+	crossDER, err := x509.CreateCertificate(rand.Reader, crossTmpl, trustedParent, &newKey.PublicKey, trustedParentKey)
+	if err != nil {
+		t.Fatalf("create cross-signed cert: %v", err)
+	}
+	crossSigned, err = x509.ParseCertificate(crossDER)
+	if err != nil {
+		t.Fatalf("parse cross-signed cert: %v", err)
+	}
 
-return selfSigned, crossSigned
+	return selfSigned, crossSigned
 }
 
 func TestHandleManualCert_CrossSignedSelfSigned(t *testing.T) {
-// Build a trusted root and a new CA whose key is cross-signed by that root.
-trustedRoot, trustedKey := generateTestCA(t)
-selfSignedNewCA, crossSignedNewCA := generateCrossSignedCA(t, trustedRoot, trustedKey)
+	// Build a trusted root and a new CA whose key is cross-signed by that root.
+	trustedRoot, trustedKey := generateTestCA(t)
+	selfSignedNewCA, crossSignedNewCA := generateCrossSignedCA(t, trustedRoot, trustedKey)
 
-// The DB contains the cross-signed version of the new CA (same SKI as the self-signed version).
-crossInfo := certutil.ParseX509Certificate(crossSignedNewCA)
-crossCand := &CertificateResult{
-CertHash:  crossInfo.CertHash,
-DER:       crossInfo.DER,
-PEM:       crossInfo.PEM(),
-Subject:   crossInfo.Subject,
-Issuer:    crossInfo.Issuer,
-NotBefore: crossInfo.NotBefore,
-NotAfter:  crossInfo.NotAfter,
-SKI:       crossInfo.SKI,
-AKI:       crossInfo.AKI,
-Parsed:    crossInfo.Parsed,
-}
+	// The DB contains the cross-signed version of the new CA (same SKI as the self-signed version).
+	crossInfo := certutil.ParseX509Certificate(crossSignedNewCA)
+	crossCand := &CertificateResult{
+		CertHash:  crossInfo.CertHash,
+		DER:       crossInfo.DER,
+		PEM:       crossInfo.PEM(),
+		Subject:   crossInfo.Subject,
+		Issuer:    crossInfo.Issuer,
+		NotBefore: crossInfo.NotBefore,
+		NotAfter:  crossInfo.NotAfter,
+		SKI:       crossInfo.SKI,
+		AKI:       crossInfo.AKI,
+		Parsed:    crossInfo.Parsed,
+	}
 
-repo := &mockRepository{skiCertificates: []*CertificateResult{crossCand}}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{skiCertificates: []*CertificateResult{crossCand}}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-// Upload the self-signed version — should be accepted because the cross-signed
-// version (same public key) is already trusted in the DB.
-form := url.Values{}
-form.Set("pem", pemEncodeTest(selfSignedNewCA.Raw))
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	// Upload the self-signed version — should be accepted because the cross-signed
+	// version (same public key) is already trusted in the DB.
+	form := url.Values{}
+	form.Set("pem", pemEncodeTest(selfSignedNewCA.Raw))
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusOK {
-t.Errorf("expected 200 for cross-signed self-signed cert, got %d: %s", w.Code, w.Body.String())
-}
-if !strings.Contains(w.Body.String(), "manual import") {
-t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
-}
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for cross-signed self-signed cert, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "manual import") {
+		t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
+	}
 }
 
 func TestHandleManualCert_UntrustedCert(t *testing.T) {
-caCert, caKey := generateTestCA(t)
-leafCert := generateTestLeaf(t, caCert, caKey)
+	caCert, caKey := generateTestCA(t)
+	leafCert := generateTestLeaf(t, caCert, caKey)
 
-// repo has no matching SKI candidates → untrusted
-repo := &mockRepository{skiCertificates: nil}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	// repo has no matching SKI candidates → untrusted
+	repo := &mockRepository{skiCertificates: nil}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", pemEncodeTest(leafCert.Raw))
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", pemEncodeTest(leafCert.Raw))
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusBadRequest {
-t.Errorf("expected 400, got %d", w.Code)
-}
-if !strings.Contains(w.Body.String(), "Untrusted") {
-t.Error("expected untrusted error")
-}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Untrusted") {
+		t.Error("expected untrusted error")
+	}
 }
 
 func TestHandleManualCert_ValidCert(t *testing.T) {
-caCert, caKey := generateTestCA(t)
-leafCert := generateTestLeaf(t, caCert, caKey)
+	caCert, caKey := generateTestCA(t)
+	leafCert := generateTestLeaf(t, caCert, caKey)
 
-// Provide the CA cert as a trusted SKI candidate
-caInfo := certutil.ParseX509Certificate(caCert)
-skiCand := &CertificateResult{
-CertHash:  caInfo.CertHash,
-DER:       caInfo.DER,
-PEM:       caInfo.PEM(),
-Subject:   caInfo.Subject,
-Issuer:    caInfo.Issuer,
-NotBefore: caInfo.NotBefore,
-NotAfter:  caInfo.NotAfter,
-SKI:       caInfo.SKI,
-AKI:       caInfo.AKI,
-Parsed:    caInfo.Parsed,
-}
+	// Provide the CA cert as a trusted SKI candidate
+	caInfo := certutil.ParseX509Certificate(caCert)
+	skiCand := &CertificateResult{
+		CertHash:  caInfo.CertHash,
+		DER:       caInfo.DER,
+		PEM:       caInfo.PEM(),
+		Subject:   caInfo.Subject,
+		Issuer:    caInfo.Issuer,
+		NotBefore: caInfo.NotBefore,
+		NotAfter:  caInfo.NotAfter,
+		SKI:       caInfo.SKI,
+		AKI:       caInfo.AKI,
+		Parsed:    caInfo.Parsed,
+	}
 
-repo := &mockRepository{skiCertificates: []*CertificateResult{skiCand}}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{skiCertificates: []*CertificateResult{skiCand}}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", pemEncodeTest(leafCert.Raw))
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", pemEncodeTest(leafCert.Raw))
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusOK {
-t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
-}
-if !strings.Contains(w.Body.String(), "manual import") {
-t.Error("expected 'manual import' status chip in results")
-}
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "manual import") {
+		t.Error("expected 'manual import' status chip in results")
+	}
 }
 
 func TestHandleIndex_ManualMode(t *testing.T) {
-repo := &mockRepository{}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-req := httptest.NewRequest(http.MethodGet, "/?manual", nil)
-w := httptest.NewRecorder()
-server.handleIndex(w, req)
+	req := httptest.NewRequest(http.MethodGet, "/?manual", nil)
+	w := httptest.NewRecorder()
+	server.handleIndex(w, req)
 
-if w.Code != http.StatusOK {
-t.Errorf("expected 200, got %d", w.Code)
-}
-if !strings.Contains(w.Body.String(), "Import Certificate") {
-t.Error("expected 'Import Certificate' heading in manual mode")
-}
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Import Certificate") {
+		t.Error("expected 'Import Certificate' heading in manual mode")
+	}
 }
 
 func TestHandleManualCert_NonCertificatePEMBlock(t *testing.T) {
-repo := &mockRepository{}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-// Generate a private key PEM block (not a CERTIFICATE)
-privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-t.Fatalf("generate key: %v", err)
-}
-keyDER, err := x509.MarshalECPrivateKey(privKey)
-if err != nil {
-t.Fatalf("marshal key: %v", err)
-}
-keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}))
+	// Generate a private key PEM block (not a CERTIFICATE)
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(privKey)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+	keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}))
 
-form := url.Values{}
-form.Set("pem", keyPEM)
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", keyPEM)
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusBadRequest {
-t.Errorf("expected 400, got %d", w.Code)
-}
-if !strings.Contains(w.Body.String(), "Invalid PEM") {
-t.Errorf("expected 'Invalid PEM' error, got: %s", w.Body.String())
-}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Invalid PEM") {
+		t.Errorf("expected 'Invalid PEM' error, got: %s", w.Body.String())
+	}
 }
 
 func TestHandleManualCert_MultiplePEMBlocks(t *testing.T) {
-caCert, caKey := generateTestCA(t)
-leafCert := generateTestLeaf(t, caCert, caKey)
+	caCert, caKey := generateTestCA(t)
+	leafCert := generateTestLeaf(t, caCert, caKey)
 
-// Submit two certificates in the PEM field
-twoCerts := pemEncodeTest(leafCert.Raw) + pemEncodeTest(caCert.Raw)
+	// Submit two certificates in the PEM field
+	twoCerts := pemEncodeTest(leafCert.Raw) + pemEncodeTest(caCert.Raw)
 
-repo := &mockRepository{}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", twoCerts)
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", twoCerts)
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusBadRequest {
-t.Errorf("expected 400, got %d", w.Code)
-}
-if !strings.Contains(w.Body.String(), "Multiple PEM Blocks") {
-t.Errorf("expected 'Multiple PEM Blocks' error, got: %s", w.Body.String())
-}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Multiple PEM Blocks") {
+		t.Errorf("expected 'Multiple PEM Blocks' error, got: %s", w.Body.String())
+	}
 }
 
 func TestHandleManualCert_TrailingPEMBlock(t *testing.T) {
@@ -1003,199 +1092,199 @@ func TestHandleManualCert_TrailingNonPEMJunk(t *testing.T) {
 }
 
 func TestHandleManualCert_MissingAKI(t *testing.T) {
-// Generate a leaf cert signed by a CA but without AKI extension
-caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-t.Fatalf("generate CA key: %v", err)
-}
-caTemplate := &x509.Certificate{
-SerialNumber:          big.NewInt(1),
-Subject:               pkix.Name{CommonName: "Test Root CA"},
-NotBefore:             time.Now().Add(-24 * time.Hour),
-NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
-IsCA:                  true,
-BasicConstraintsValid: true,
-KeyUsage:              x509.KeyUsageCertSign,
-SubjectKeyId:          []byte{1, 2, 3, 4, 5},
-}
-caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
-if err != nil {
-t.Fatalf("create CA: %v", err)
-}
-caCert, _ := x509.ParseCertificate(caDER)
+	// Generate a leaf cert signed by a CA but without AKI extension
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate CA key: %v", err)
+	}
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test Root CA"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign,
+		SubjectKeyId:          []byte{1, 2, 3, 4, 5},
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create CA: %v", err)
+	}
+	caCert, _ := x509.ParseCertificate(caDER)
 
-leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-t.Fatalf("generate leaf key: %v", err)
-}
-// Leaf cert has NO AuthorityKeyId
-leafTemplate := &x509.Certificate{
-SerialNumber:          big.NewInt(2),
-Subject:               pkix.Name{CommonName: "no-aki.example.com"},
-NotBefore:             time.Now().Add(-24 * time.Hour),
-NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-KeyUsage:              x509.KeyUsageDigitalSignature,
-BasicConstraintsValid: true,
-// AuthorityKeyId intentionally omitted
-}
-leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caCert, &leafKey.PublicKey, caKey)
-if err != nil {
-t.Fatalf("create leaf: %v", err)
-}
-leafCert, _ := x509.ParseCertificate(leafDER)
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate leaf key: %v", err)
+	}
+	// Leaf cert has NO AuthorityKeyId
+	leafTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "no-aki.example.com"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		// AuthorityKeyId intentionally omitted
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caCert, &leafKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create leaf: %v", err)
+	}
+	leafCert, _ := x509.ParseCertificate(leafDER)
 
-repo := &mockRepository{}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", pemEncodeTest(leafCert.Raw))
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", pemEncodeTest(leafCert.Raw))
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusBadRequest {
-t.Errorf("expected 400, got %d", w.Code)
-}
-if !strings.Contains(w.Body.String(), "Untrusted Certificate") {
-t.Errorf("expected 'Untrusted Certificate' error for missing AKI, got: %s", w.Body.String())
-}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Untrusted Certificate") {
+		t.Errorf("expected 'Untrusted Certificate' error for missing AKI, got: %s", w.Body.String())
+	}
 }
 
 func TestHandleManualCert_NonCAIssuerRejected(t *testing.T) {
-// A cert signed by a non-CA cert (IsCA=false) should be rejected
-// because CheckSignatureFrom enforces CA status
-nonCAKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-t.Fatalf("generate key: %v", err)
-}
-ski := []byte{10, 20, 30, 40, 50}
-// Create a non-CA "signer" cert (IsCA=false)
-nonCATemplate := &x509.Certificate{
-SerialNumber:          big.NewInt(1),
-Subject:               pkix.Name{CommonName: "Not A CA"},
-NotBefore:             time.Now().Add(-24 * time.Hour),
-NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
-IsCA:                  false,
-BasicConstraintsValid: true,
-SubjectKeyId:          ski,
-}
-nonCADER, err := x509.CreateCertificate(rand.Reader, nonCATemplate, nonCATemplate, &nonCAKey.PublicKey, nonCAKey)
-if err != nil {
-t.Fatalf("create non-CA: %v", err)
-}
-nonCACert, _ := x509.ParseCertificate(nonCADER)
+	// A cert signed by a non-CA cert (IsCA=false) should be rejected
+	// because CheckSignatureFrom enforces CA status
+	nonCAKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	ski := []byte{10, 20, 30, 40, 50}
+	// Create a non-CA "signer" cert (IsCA=false)
+	nonCATemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Not A CA"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		IsCA:                  false,
+		BasicConstraintsValid: true,
+		SubjectKeyId:          ski,
+	}
+	nonCADER, err := x509.CreateCertificate(rand.Reader, nonCATemplate, nonCATemplate, &nonCAKey.PublicKey, nonCAKey)
+	if err != nil {
+		t.Fatalf("create non-CA: %v", err)
+	}
+	nonCACert, _ := x509.ParseCertificate(nonCADER)
 
-// Create a leaf signed by the non-CA cert
-leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-if err != nil {
-t.Fatalf("generate leaf key: %v", err)
-}
-leafTemplate := &x509.Certificate{
-SerialNumber:          big.NewInt(2),
-Subject:               pkix.Name{CommonName: "leaf.example.com"},
-NotBefore:             time.Now().Add(-24 * time.Hour),
-NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-KeyUsage:              x509.KeyUsageDigitalSignature,
-BasicConstraintsValid: true,
-AuthorityKeyId:        ski,
-}
-leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, nonCACert, &leafKey.PublicKey, nonCAKey)
-if err != nil {
-t.Fatalf("create leaf: %v", err)
-}
-leafCert, _ := x509.ParseCertificate(leafDER)
+	// Create a leaf signed by the non-CA cert
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate leaf key: %v", err)
+	}
+	leafTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "leaf.example.com"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		AuthorityKeyId:        ski,
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, nonCACert, &leafKey.PublicKey, nonCAKey)
+	if err != nil {
+		t.Fatalf("create leaf: %v", err)
+	}
+	leafCert, _ := x509.ParseCertificate(leafDER)
 
-// The non-CA cert is in the DB as a candidate (SKI matches)
-nonCAInfo := certutil.ParseX509Certificate(nonCACert)
-skiCand := &CertificateResult{
-CertHash:  nonCAInfo.CertHash,
-DER:       nonCAInfo.DER,
-PEM:       nonCAInfo.PEM(),
-Subject:   nonCAInfo.Subject,
-Issuer:    nonCAInfo.Issuer,
-NotBefore: nonCAInfo.NotBefore,
-NotAfter:  nonCAInfo.NotAfter,
-SKI:       nonCAInfo.SKI,
-AKI:       nonCAInfo.AKI,
-Parsed:    nonCAInfo.Parsed,
-}
+	// The non-CA cert is in the DB as a candidate (SKI matches)
+	nonCAInfo := certutil.ParseX509Certificate(nonCACert)
+	skiCand := &CertificateResult{
+		CertHash:  nonCAInfo.CertHash,
+		DER:       nonCAInfo.DER,
+		PEM:       nonCAInfo.PEM(),
+		Subject:   nonCAInfo.Subject,
+		Issuer:    nonCAInfo.Issuer,
+		NotBefore: nonCAInfo.NotBefore,
+		NotAfter:  nonCAInfo.NotAfter,
+		SKI:       nonCAInfo.SKI,
+		AKI:       nonCAInfo.AKI,
+		Parsed:    nonCAInfo.Parsed,
+	}
 
-repo := &mockRepository{skiCertificates: []*CertificateResult{skiCand}}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{skiCertificates: []*CertificateResult{skiCand}}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", pemEncodeTest(leafCert.Raw))
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Header.Set("HX-Request", "true")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", pemEncodeTest(leafCert.Raw))
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusBadRequest {
-t.Errorf("expected 400 for non-CA issuer, got %d: %s", w.Code, w.Body.String())
-}
-if !strings.Contains(w.Body.String(), "Untrusted") {
-t.Errorf("expected untrusted error for non-CA issuer, got: %s", w.Body.String())
-}
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for non-CA issuer, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Untrusted") {
+		t.Errorf("expected untrusted error for non-CA issuer, got: %s", w.Body.String())
+	}
 }
 
 func TestHandleManualCert_FullPagePreservesManualMode(t *testing.T) {
-caCert, caKey := generateTestCA(t)
-leafCert := generateTestLeaf(t, caCert, caKey)
+	caCert, caKey := generateTestCA(t)
+	leafCert := generateTestLeaf(t, caCert, caKey)
 
-caInfo := certutil.ParseX509Certificate(caCert)
-skiCand := &CertificateResult{
-CertHash:  caInfo.CertHash,
-DER:       caInfo.DER,
-PEM:       caInfo.PEM(),
-Subject:   caInfo.Subject,
-Issuer:    caInfo.Issuer,
-NotBefore: caInfo.NotBefore,
-NotAfter:  caInfo.NotAfter,
-SKI:       caInfo.SKI,
-AKI:       caInfo.AKI,
-Parsed:    caInfo.Parsed,
-}
+	caInfo := certutil.ParseX509Certificate(caCert)
+	skiCand := &CertificateResult{
+		CertHash:  caInfo.CertHash,
+		DER:       caInfo.DER,
+		PEM:       caInfo.PEM(),
+		Subject:   caInfo.Subject,
+		Issuer:    caInfo.Issuer,
+		NotBefore: caInfo.NotBefore,
+		NotAfter:  caInfo.NotAfter,
+		SKI:       caInfo.SKI,
+		AKI:       caInfo.AKI,
+		Parsed:    caInfo.Parsed,
+	}
 
-repo := &mockRepository{skiCertificates: []*CertificateResult{skiCand}}
-crawler := &mockCrawler{}
-server, err := New(DefaultConfig(), repo, crawler)
-if err != nil {
-t.Fatalf("create server: %v", err)
-}
+	repo := &mockRepository{skiCertificates: []*CertificateResult{skiCand}}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
 
-form := url.Values{}
-form.Set("pem", pemEncodeTest(leafCert.Raw))
-// No HX-Request header → full page response
-req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
-req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-req.Host = "localhost:8080"
+	form := url.Values{}
+	form.Set("pem", pemEncodeTest(leafCert.Raw))
+	// No HX-Request header → full page response
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "localhost:8080"
 
-w := httptest.NewRecorder()
-server.handleManualCert(w, req)
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
 
-if w.Code != http.StatusOK {
-t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
-}
-// Full page response should show the PEM textarea (manual mode form), not the domain input
-body := w.Body.String()
-if !strings.Contains(body, "Import Certificate") {
-t.Errorf("expected 'Import Certificate' heading (manual mode) in full-page response, got domain form instead")
-}
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	// Full page response should show the PEM textarea (manual mode form), not the domain input
+	body := w.Body.String()
+	if !strings.Contains(body, "Import Certificate") {
+		t.Errorf("expected 'Import Certificate' heading (manual mode) in full-page response, got domain form instead")
+	}
 }
 
 func TestHandleDownload_MissingParams(t *testing.T) {
@@ -1325,7 +1414,7 @@ func TestSanitizeDownloadFilename(t *testing.T) {
 }
 
 func TestBuildNormalDownloadURL(t *testing.T) {
-	url := buildNormalDownloadURL("github.com", ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: false})
+	url := buildNormalDownloadURL("github.com", 443, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: false})
 	if !strings.Contains(url, "domain=github.com") {
 		t.Errorf("expected domain param in URL, got %s", url)
 	}
@@ -1334,6 +1423,11 @@ func TestBuildNormalDownloadURL(t *testing.T) {
 	}
 	if strings.Contains(url, "showExpired") {
 		t.Errorf("expected no showExpired param when false, got %s", url)
+	}
+
+	url = buildNormalDownloadURL("github.com", 8443, ChainGraphFilters{})
+	if !strings.Contains(url, "port=8443") {
+		t.Errorf("expected port param in URL, got %s", url)
 	}
 }
 

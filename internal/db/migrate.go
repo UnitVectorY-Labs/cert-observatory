@@ -14,7 +14,7 @@ import (
 var migrations embed.FS
 
 // ExpectedVersion is the expected migration version for this binary.
-const ExpectedVersion = 1
+const ExpectedVersion = 2
 
 // RunMigrations runs all pending database migrations.
 func RunMigrations(db *sql.DB) error {

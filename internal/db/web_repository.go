@@ -28,8 +28,14 @@ func NewWebRepository(db *DB) *WebRepository {
 
 // GetDomainWithChain retrieves a domain and its current chain with certificates.
 func (r *WebRepository) GetDomainWithChain(ctx context.Context, domainName string) (*web.DomainResult, error) {
+	return r.GetDomainWithChainForPort(ctx, domainName, 443)
+}
+
+// GetDomainWithChainForPort retrieves a domain target and its current chain with certificates.
+func (r *WebRepository) GetDomainWithChainForPort(ctx context.Context, domainName string, port int) (*web.DomainResult, error) {
 	result := &web.DomainResult{
 		Domain: domainName,
+		Port:   port,
 	}
 
 	// Get domain info
@@ -39,8 +45,8 @@ func (r *WebRepository) GetDomainWithChain(ctx context.Context, domainName strin
 	err := r.db.QueryRowContext(ctx, `
 		SELECT current_chain_hash, current_chain_updated_at
 		FROM domains
-		WHERE domain = $1
-	`, domainName).Scan(&chainHash, &updatedAt)
+		WHERE domain = $1 AND port = $2
+	`, domainName, port).Scan(&chainHash, &updatedAt)
 
 	if err == sql.ErrNoRows {
 		return result, nil
@@ -153,13 +159,18 @@ func (r *WebRepository) GetCertificateByHash(ctx context.Context, hash []byte) (
 
 // CanStandardRefresh checks if a standard refresh is allowed for the domain.
 func (r *WebRepository) CanStandardRefresh(ctx context.Context, domainName string, window time.Duration) (bool, time.Duration, error) {
+	return r.CanStandardRefreshForPort(ctx, domainName, 443, window)
+}
+
+// CanStandardRefreshForPort checks if a standard refresh is allowed for the domain target.
+func (r *WebRepository) CanStandardRefreshForPort(ctx context.Context, domainName string, port int, window time.Duration) (bool, time.Duration, error) {
 	var lastAttempt sql.NullTime
 
 	err := r.db.QueryRowContext(ctx, `
 		SELECT last_standard_attempt_at
 		FROM domains
-		WHERE domain = $1
-	`, domainName).Scan(&lastAttempt)
+		WHERE domain = $1 AND port = $2
+	`, domainName, port).Scan(&lastAttempt)
 
 	if err == sql.ErrNoRows {
 		// Domain doesn't exist, allow refresh
@@ -184,13 +195,18 @@ func (r *WebRepository) CanStandardRefresh(ctx context.Context, domainName strin
 
 // CanForcedRefresh checks if a forced refresh is allowed for the domain.
 func (r *WebRepository) CanForcedRefresh(ctx context.Context, domainName string, window time.Duration) (bool, time.Duration, error) {
+	return r.CanForcedRefreshForPort(ctx, domainName, 443, window)
+}
+
+// CanForcedRefreshForPort checks if a forced refresh is allowed for the domain target.
+func (r *WebRepository) CanForcedRefreshForPort(ctx context.Context, domainName string, port int, window time.Duration) (bool, time.Duration, error) {
 	var lastAttempt sql.NullTime
 
 	err := r.db.QueryRowContext(ctx, `
 		SELECT last_forced_attempt_at
 		FROM domains
-		WHERE domain = $1
-	`, domainName).Scan(&lastAttempt)
+		WHERE domain = $1 AND port = $2
+	`, domainName, port).Scan(&lastAttempt)
 
 	if err == sql.ErrNoRows {
 		// Domain doesn't exist, allow refresh
@@ -216,6 +232,11 @@ func (r *WebRepository) CanForcedRefresh(ctx context.Context, domainName string,
 // AcquireLock tries to acquire a crawl lock for the domain using PostgreSQL advisory locks.
 // This is a no-op since we've removed the domain_locks table and rely on idempotent upserts.
 func (r *WebRepository) AcquireLock(ctx context.Context, domainName string, lockID string, ttl time.Duration) (bool, error) {
+	return r.AcquireLockForPort(ctx, domainName, 443, lockID, ttl)
+}
+
+// AcquireLockForPort tries to acquire a crawl lock for the domain target.
+func (r *WebRepository) AcquireLockForPort(ctx context.Context, domainName string, port int, lockID string, ttl time.Duration) (bool, error) {
 	// With the simplified schema, we rely on idempotent upserts instead of explicit locks.
 	// All database writes (certificate inserts, chain inserts, domain updates, domain_chains upserts)
 	// are idempotent and use ON CONFLICT clauses, so concurrent crawls are safe.
@@ -226,6 +247,11 @@ func (r *WebRepository) AcquireLock(ctx context.Context, domainName string, lock
 // ReleaseLock releases a crawl lock for the domain.
 // This is a no-op since we've removed the domain_locks table.
 func (r *WebRepository) ReleaseLock(ctx context.Context, domainName string, lockID string) error {
+	return r.ReleaseLockForPort(ctx, domainName, 443, lockID)
+}
+
+// ReleaseLockForPort releases a crawl lock for the domain target.
+func (r *WebRepository) ReleaseLockForPort(ctx context.Context, domainName string, port int, lockID string) error {
 	// No-op: locks are no longer used
 	return nil
 }
@@ -238,7 +264,7 @@ func (r *WebRepository) RecordCrawlResult(ctx context.Context, input *web.CrawlR
 		if input.Forced {
 			mode = CrawlModeForced
 		}
-		return r.repo.RecordFailedCrawl(ctx, input.Domain, time.Now(), mode)
+		return r.repo.RecordFailedCrawlForPort(ctx, input.Domain, input.Port, time.Now(), mode)
 	}
 
 	// Convert web types to internal types
@@ -274,6 +300,7 @@ func (r *WebRepository) RecordCrawlResult(ctx context.Context, input *web.CrawlR
 
 	result := &CrawlResult{
 		Domain:    input.Domain,
+		Port:      input.Port,
 		ChainInfo: chainInfo,
 		CrawlTime: time.Now(),
 		Mode:      mode,
