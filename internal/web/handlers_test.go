@@ -629,6 +629,7 @@ t.Error("expected 'Invalid PEM' error")
 func TestHandleManualCert_SelfSigned(t *testing.T) {
 caCert, _ := generateTestCA(t)
 
+// No cross-signed equivalent in the DB → trust lookup finds nothing → Untrusted.
 repo := &mockRepository{}
 crawler := &mockCrawler{}
 server, err := New(DefaultConfig(), repo, crawler)
@@ -649,8 +650,117 @@ server.handleManualCert(w, req)
 if w.Code != http.StatusBadRequest {
 t.Errorf("expected 400, got %d", w.Code)
 }
-if !strings.Contains(w.Body.String(), "Self-Signed") {
-t.Error("expected self-signed error")
+if !strings.Contains(w.Body.String(), "Untrusted") {
+t.Errorf("expected untrusted error for self-signed cert with no DB match, got: %s", w.Body.String())
+}
+}
+
+// generateCrossSignedCA creates two certificates for the same key pair:
+//  1. A self-signed root cert (Subject == Issuer, signed by its own key).
+//  2. A cross-signed cert where the same public key is issued by trustedParent.
+//
+// This mirrors real-world cross-signing where a CA key is vouched for by an
+// already-trusted root.
+func generateCrossSignedCA(t *testing.T, trustedParent *x509.Certificate, trustedParentKey *ecdsa.PrivateKey) (selfSigned *x509.Certificate, crossSigned *x509.Certificate) {
+t.Helper()
+// Key for the new CA
+newKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+if err != nil {
+t.Fatalf("generate new CA key: %v", err)
+}
+ski := make([]byte, 20)
+if _, err := rand.Read(ski); err != nil {
+t.Fatalf("generate SKI: %v", err)
+}
+
+// Self-signed version (Subject == Issuer)
+selfTmpl := &x509.Certificate{
+SerialNumber:          big.NewInt(10),
+Subject:               pkix.Name{CommonName: "New Cross-Signed Root CA"},
+NotBefore:             time.Now().Add(-24 * time.Hour),
+NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+IsCA:                  true,
+BasicConstraintsValid: true,
+KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+SubjectKeyId:          ski,
+}
+selfDER, err := x509.CreateCertificate(rand.Reader, selfTmpl, selfTmpl, &newKey.PublicKey, newKey)
+if err != nil {
+t.Fatalf("create self-signed cert: %v", err)
+}
+selfSigned, err = x509.ParseCertificate(selfDER)
+if err != nil {
+t.Fatalf("parse self-signed cert: %v", err)
+}
+
+// Cross-signed version (same key/subject, but issued and signed by trustedParent)
+crossTmpl := &x509.Certificate{
+SerialNumber:          big.NewInt(11),
+Subject:               pkix.Name{CommonName: "New Cross-Signed Root CA"},
+NotBefore:             time.Now().Add(-24 * time.Hour),
+NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+IsCA:                  true,
+BasicConstraintsValid: true,
+KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+SubjectKeyId:          ski,
+AuthorityKeyId:        trustedParent.SubjectKeyId,
+}
+crossDER, err := x509.CreateCertificate(rand.Reader, crossTmpl, trustedParent, &newKey.PublicKey, trustedParentKey)
+if err != nil {
+t.Fatalf("create cross-signed cert: %v", err)
+}
+crossSigned, err = x509.ParseCertificate(crossDER)
+if err != nil {
+t.Fatalf("parse cross-signed cert: %v", err)
+}
+
+return selfSigned, crossSigned
+}
+
+func TestHandleManualCert_CrossSignedSelfSigned(t *testing.T) {
+// Build a trusted root and a new CA whose key is cross-signed by that root.
+trustedRoot, trustedKey := generateTestCA(t)
+selfSignedNewCA, crossSignedNewCA := generateCrossSignedCA(t, trustedRoot, trustedKey)
+
+// The DB contains the cross-signed version of the new CA (same SKI as the self-signed version).
+crossInfo := certutil.ParseX509Certificate(crossSignedNewCA)
+crossCand := &CertificateResult{
+CertHash:  crossInfo.CertHash,
+DER:       crossInfo.DER,
+PEM:       crossInfo.PEM(),
+Subject:   crossInfo.Subject,
+Issuer:    crossInfo.Issuer,
+NotBefore: crossInfo.NotBefore,
+NotAfter:  crossInfo.NotAfter,
+SKI:       crossInfo.SKI,
+AKI:       crossInfo.AKI,
+Parsed:    crossInfo.Parsed,
+}
+
+repo := &mockRepository{skiCertificates: []*CertificateResult{crossCand}}
+crawler := &mockCrawler{}
+server, err := New(DefaultConfig(), repo, crawler)
+if err != nil {
+t.Fatalf("create server: %v", err)
+}
+
+// Upload the self-signed version — should be accepted because the cross-signed
+// version (same public key) is already trusted in the DB.
+form := url.Values{}
+form.Set("pem", pemEncodeTest(selfSignedNewCA.Raw))
+req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+req.Header.Set("HX-Request", "true")
+req.Host = "localhost:8080"
+
+w := httptest.NewRecorder()
+server.handleManualCert(w, req)
+
+if w.Code != http.StatusOK {
+t.Errorf("expected 200 for cross-signed self-signed cert, got %d: %s", w.Code, w.Body.String())
+}
+if !strings.Contains(w.Body.String(), "manual import") {
+t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
 }
 }
 

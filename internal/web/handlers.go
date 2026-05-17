@@ -92,22 +92,27 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 		Position:  1,
 	}
 
-	// Validate: the certificate MUST be signed by a trusted cert already in the DB.
-	// Self-signed certificates are not accepted unless they are already a trusted root in the DB
-	// that signs themselves (which would be found as their own issuer, but self-signed uploads
-	// are rejected per spec - "it MUST be valid" means issued by something trusted).
-	if isSignatureSelfSigned(uploaded) {
-		s.renderManualError(w, r, "Self-Signed Certificate", "Self-signed certificates cannot be uploaded via manual import. The certificate must be signed by a trusted certificate already in the database.", http.StatusBadRequest)
-		return
+	// Look up valid issuers from the DB using AKI→SKI matching + signature verification.
+	// Self-signed certificates are accepted when a cross-signed version of the same key
+	// already exists in the DB—the cross-signed cert shares the same SKI (public key), so
+	// its presence means the key has already been vouched for by a trusted root.
+	//
+	// Lookup key selection:
+	//   - Use AKI when present (standard: AKI points to the issuer's SKI).
+	//   - For self-signed certs without AKI, fall back to the cert's own SKI to locate a
+	//     cross-signed equivalent (same public key, different trusted issuer) in the DB.
+	lookupKey := uploaded.AKI
+	if len(lookupKey) == 0 {
+		if isSignatureSelfSigned(uploaded) {
+			lookupKey = uploaded.SKI
+		}
+		if len(lookupKey) == 0 {
+			s.renderManualError(w, r, "Untrusted Certificate", "The certificate does not have an Authority Key Identifier (AKI) extension. Cannot verify its issuer.", http.StatusBadRequest)
+			return
+		}
 	}
 
-	// Look up valid issuers from the DB using AKI→SKI matching + signature verification
-	if len(uploaded.AKI) == 0 {
-		s.renderManualError(w, r, "Untrusted Certificate", "The certificate does not have an Authority Key Identifier (AKI) extension. Cannot verify its issuer.", http.StatusBadRequest)
-		return
-	}
-
-	candidates, err := s.repo.FindCertificatesBySKI(r.Context(), uploaded.AKI)
+	candidates, err := s.repo.FindCertificatesBySKI(r.Context(), lookupKey)
 	if err != nil {
 		s.logger.Error("failed to look up issuer candidates", "error", err)
 		s.renderManualError(w, r, "Database Error", "Could not look up issuer certificates.", http.StatusInternalServerError)
