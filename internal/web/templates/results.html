@@ -2,7 +2,7 @@
 <div class="results-wrap">
     <div class="results-toolbar">
         <div class="status-row">
-            <span class="domain-name">{{.Domain}}</span>
+            <span class="domain-name">{{.DisplayTarget}}</span>
             {{if .IsManual}}
             <span class="status-chip status-fresh">manual import</span>
             {{else if .IsCached}}
@@ -15,8 +15,8 @@
             {{end}}
         </div>
         {{if and .CanForceRefresh .IsCached}}
-        <form method="POST" action="/refresh" class="inline" hx-post="/refresh" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
-            <input type="hidden" name="domain" value="{{.Domain}}">
+        <form method="POST" action="/refresh{{if ne .Port 443}}?port{{end}}" class="inline" hx-post="/refresh{{if ne .Port 443}}?port{{end}}" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
+            <input type="hidden" name="domain" value="{{.DisplayTarget}}">
             <button type="submit" class="btn-secondary">
                 <span class="htmx-indicator h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-slate-100 dark:border-slate-500 dark:border-t-slate-100"></span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>

@@ -22,7 +22,12 @@ func NewWebCrawler(timeout time.Duration) *WebCrawler {
 
 // Crawl performs a TLS handshake and returns the certificate chain.
 func (wc *WebCrawler) Crawl(ctx context.Context, domain string) (*web.CrawlOutput, error) {
-	result, err := wc.crawler.Crawl(ctx, domain)
+	return wc.CrawlPort(ctx, domain, 443)
+}
+
+// CrawlPort performs a TLS handshake on the specified port and returns the certificate chain.
+func (wc *WebCrawler) CrawlPort(ctx context.Context, domain string, port int) (*web.CrawlOutput, error) {
+	result, err := wc.crawler.CrawlPort(ctx, domain, port)
 	if err != nil {
 		return nil, err
 	}
@@ -47,6 +52,7 @@ func (wc *WebCrawler) Crawl(ctx context.Context, domain string) (*web.CrawlOutpu
 
 	return &web.CrawlOutput{
 		Domain: domain,
+		Port:   port,
 		Chain:  chain,
 	}, nil
 }

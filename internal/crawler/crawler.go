@@ -22,6 +22,8 @@ var (
 type CrawlResult struct {
 	// Domain is the normalized domain that was crawled
 	Domain string
+	// Port is the TCP port used for the TLS handshake
+	Port int
 	// ChainInfo contains the parsed certificate chain information
 	ChainInfo *certutil.ChainInfo
 	// RawCerts contains the raw x509.Certificate objects
@@ -68,6 +70,12 @@ func New(timeout time.Duration) *Crawler {
 //   - Does not send HTTP requests or follow redirects
 //   - Does not fetch OCSP/CRL or perform AIA fetching
 func (c *Crawler) Crawl(ctx context.Context, domain string) (*CrawlResult, error) {
+	return c.CrawlPort(ctx, domain, 443)
+}
+
+// CrawlPort performs a TLS handshake to the specified domain and TCP port and
+// returns the certificate chain presented by the server.
+func (c *Crawler) CrawlPort(ctx context.Context, domain string, port int) (*CrawlResult, error) {
 	crawlTime := time.Now()
 
 	// Create context with timeout if not already set
@@ -81,7 +89,7 @@ func (c *Crawler) Crawl(ctx context.Context, domain string) (*CrawlResult, error
 	dialer := &net.Dialer{}
 
 	// Dial TCP connection
-	addr := net.JoinHostPort(domain, "443")
+	addr := net.JoinHostPort(domain, fmt.Sprintf("%d", port))
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, &CrawlError{Domain: domain, Err: fmt.Errorf("tcp connect: %w", err)}
@@ -124,6 +132,7 @@ func (c *Crawler) Crawl(ctx context.Context, domain string) (*CrawlResult, error
 
 	return &CrawlResult{
 		Domain:    domain,
+		Port:      port,
 		ChainInfo: chainInfo,
 		RawCerts:  state.PeerCertificates,
 		CrawlTime: crawlTime,

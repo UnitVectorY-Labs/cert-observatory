@@ -73,6 +73,7 @@ func (r *Repository) GetEligibleDomainsForCrawl(ctx context.Context, effectiveAg
 		SELECT domain
 		FROM domains
 		WHERE auto_crawl = true
+		  AND port = 443
 		  AND (no_retry_before IS NULL OR no_retry_before <= now())
 		  AND (last_success_at IS NULL OR last_success_at <= $1)
 		ORDER BY
@@ -114,6 +115,7 @@ func (r *Repository) GetEligibleDomainsForCrawl(ctx context.Context, effectiveAg
 func (r *Repository) RecordAutoCrawlSuccess(ctx context.Context, domain string, chainInfo *certutil.ChainInfo, crawlTime time.Time) (*CrawlStats, error) {
 	result := &CrawlResult{
 		Domain:    domain,
+		Port:      443,
 		ChainInfo: chainInfo,
 		CrawlTime: crawlTime,
 		Mode:      CrawlModeAuto,
@@ -126,7 +128,7 @@ func (r *Repository) RecordAutoCrawlSuccess(ctx context.Context, domain string, 
 
 	// Also clear no_retry_before explicitly for auto mode
 	_, err = r.db.ExecContext(ctx, `
-		UPDATE domains SET no_retry_before = NULL WHERE domain = $1
+		UPDATE domains SET no_retry_before = NULL WHERE domain = $1 AND port = 443
 	`, domain)
 	if err != nil {
 		return nil, fmt.Errorf("clear no_retry_before: %w", err)
@@ -144,7 +146,7 @@ func (r *Repository) RecordAutoCrawlFailure(ctx context.Context, domain string, 
 	defer tx.Rollback()
 
 	// Upsert domain
-	_, _, err = r.upsertDomain(ctx, tx, domain)
+	_, _, err = r.upsertDomain(ctx, tx, domain, 443)
 	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("upsert domain: %w", err)
 	}
@@ -152,7 +154,7 @@ func (r *Repository) RecordAutoCrawlFailure(ctx context.Context, domain string, 
 	// Get current consecutive failures and increment
 	var currentFailures int
 	err = tx.QueryRowContext(ctx, `
-		SELECT consecutive_failures FROM domains WHERE domain = $1
+		SELECT consecutive_failures FROM domains WHERE domain = $1 AND port = 443
 	`, domain).Scan(&currentFailures)
 	if err != nil && err != sql.ErrNoRows {
 		return time.Time{}, 0, fmt.Errorf("get consecutive failures: %w", err)
@@ -168,7 +170,7 @@ func (r *Repository) RecordAutoCrawlFailure(ctx context.Context, domain string, 
 			last_failure_at = $2,
 			consecutive_failures = $3,
 			no_retry_before = $4
-		WHERE domain = $1
+		WHERE domain = $1 AND port = 443
 	`, domain, crawlTime, newFailures, noRetryBefore)
 	if err != nil {
 		return time.Time{}, 0, fmt.Errorf("update domain failure: %w", err)
@@ -190,6 +192,7 @@ func (r *Repository) CountEligibleDomains(ctx context.Context, effectiveAge time
 		SELECT COUNT(*)
 		FROM domains
 		WHERE auto_crawl = true
+		  AND port = 443
 		  AND (no_retry_before IS NULL OR no_retry_before <= now())
 		  AND (last_success_at IS NULL OR last_success_at <= $1)
 	`, threshold).Scan(&count)
@@ -205,7 +208,7 @@ func (r *Repository) CountEligibleDomainsWithOptions(ctx context.Context, effect
 	threshold := time.Now().Add(-effectiveAge)
 
 	// Build the query dynamically based on options
-	query := `SELECT COUNT(*) FROM domains WHERE auto_crawl = true`
+	query := `SELECT COUNT(*) FROM domains WHERE auto_crawl = true AND port = 443`
 
 	// Handle backoff logic
 	if !opts.IgnoreErrors {
@@ -233,7 +236,7 @@ func (r *Repository) GetEligibleDomainsForCrawlWithOptions(ctx context.Context, 
 	threshold := time.Now().Add(-effectiveAge)
 
 	// Build the query dynamically based on options
-	query := `SELECT domain FROM domains WHERE auto_crawl = true`
+	query := `SELECT domain FROM domains WHERE auto_crawl = true AND port = 443`
 
 	// Handle backoff logic
 	if !opts.IgnoreErrors {
@@ -295,14 +298,14 @@ func (r *Repository) UpsertDomainFromToplist(ctx context.Context, domain string)
 	err = tx.QueryRowContext(ctx, `
 		SELECT popular_domain, auto_crawl
 		FROM domains
-		WHERE domain = $1
+		WHERE domain = $1 AND port = 443
 	`, domain).Scan(&popularDomain, &autoCrawl)
 
 	if err == sql.ErrNoRows {
 		// Insert new domain
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO domains (domain, first_seen_at, popular_domain, auto_crawl)
-			VALUES ($1, now(), true, true)
+			INSERT INTO domains (domain, port, first_seen_at, popular_domain, auto_crawl)
+			VALUES ($1, 443, now(), true, true)
 		`, domain)
 		if err != nil {
 			return false, false, fmt.Errorf("insert domain: %w", err)
@@ -322,7 +325,7 @@ func (r *Repository) UpsertDomainFromToplist(ctx context.Context, domain string)
 	needsUpdate := !popularDomain || !autoCrawl
 	if needsUpdate {
 		_, err = tx.ExecContext(ctx, `
-			UPDATE domains SET popular_domain = true, auto_crawl = true WHERE domain = $1
+			UPDATE domains SET popular_domain = true, auto_crawl = true WHERE domain = $1 AND port = 443
 		`, domain)
 		if err != nil {
 			return false, false, fmt.Errorf("update domain: %w", err)
@@ -358,14 +361,14 @@ func (r *Repository) BulkUpsertDomainsFromToplist(ctx context.Context, domains [
 		err = tx.QueryRowContext(ctx, `
 			SELECT popular_domain, auto_crawl
 			FROM domains
-			WHERE domain = $1
+			WHERE domain = $1 AND port = 443
 		`, domain).Scan(&popularDomain, &autoCrawl)
 
 		if err == sql.ErrNoRows {
 			// Insert new domain
 			_, err = tx.ExecContext(ctx, `
-				INSERT INTO domains (domain, first_seen_at, popular_domain, auto_crawl)
-				VALUES ($1, now(), true, true)
+				INSERT INTO domains (domain, port, first_seen_at, popular_domain, auto_crawl)
+				VALUES ($1, 443, now(), true, true)
 			`, domain)
 			if err != nil {
 				return inserted, updated, fmt.Errorf("insert domain %s: %w", domain, err)
@@ -382,7 +385,7 @@ func (r *Repository) BulkUpsertDomainsFromToplist(ctx context.Context, domains [
 		needsUpdate := !popularDomain || !autoCrawl
 		if needsUpdate {
 			_, err = tx.ExecContext(ctx, `
-				UPDATE domains SET popular_domain = true, auto_crawl = true WHERE domain = $1
+				UPDATE domains SET popular_domain = true, auto_crawl = true WHERE domain = $1 AND port = 443
 			`, domain)
 			if err != nil {
 				return inserted, updated, fmt.Errorf("update domain %s: %w", domain, err)

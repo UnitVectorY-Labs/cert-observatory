@@ -6,10 +6,10 @@ import (
 
 func TestNormalizeAndValidate(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		want      string
-		wantErr   error
+		name       string
+		input      string
+		want       string
+		wantErr    error
 		wantAnyErr bool // if true, just check that an error is returned
 	}{
 		// Valid cases
@@ -209,9 +209,9 @@ func TestNormalizeAndValidate(t *testing.T) {
 			wantAnyErr: true,
 		},
 		{
-			name:       "label too long (64 chars)",
-			input:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com", // 64 'a's exceeds 63 char limit
-			wantErr:    ErrDomainLabelTooLong,
+			name:    "label too long (64 chars)",
+			input:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com", // 64 'a's exceeds 63 char limit
+			wantErr: ErrDomainLabelTooLong,
 		},
 
 		// Edge cases - length
@@ -260,7 +260,7 @@ func TestNormalizeAndValidate_TooLong(t *testing.T) {
 			longDomain = longDomain[:i+2] + "." + longDomain[i+3:]
 		}
 	}
-	
+
 	// Simpler test: just make a really long string
 	longInput := make([]byte, 260)
 	for i := range longInput {
@@ -269,9 +269,74 @@ func TestNormalizeAndValidate_TooLong(t *testing.T) {
 			longInput[i] = '.'
 		}
 	}
-	
+
 	_, err := NormalizeAndValidate(string(longInput))
 	if err != ErrDomainTooLong {
 		t.Errorf("Expected ErrDomainTooLong, got %v", err)
+	}
+}
+
+func TestNormalizeAndValidateTargetWithPort(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    *Target
+		wantErr error
+	}{
+		{
+			name:  "default port",
+			input: "Example.COM",
+			want:  &Target{Domain: "example.com", Port: 443},
+		},
+		{
+			name:  "custom port",
+			input: "Example.COM:8443",
+			want:  &Target{Domain: "example.com", Port: 8443},
+		},
+		{
+			name:  "lowest valid port",
+			input: "example.com:1",
+			want:  &Target{Domain: "example.com", Port: 1},
+		},
+		{
+			name:  "highest valid port",
+			input: "example.com:65535",
+			want:  &Target{Domain: "example.com", Port: 65535},
+		},
+		{
+			name:    "zero port",
+			input:   "example.com:0",
+			wantErr: ErrInvalidPort,
+		},
+		{
+			name:    "too high port",
+			input:   "example.com:65536",
+			wantErr: ErrInvalidPort,
+		},
+		{
+			name:    "non numeric port",
+			input:   "example.com:https",
+			wantErr: ErrInvalidPort,
+		},
+		{
+			name:    "ipv6 literal remains invalid",
+			input:   "::1",
+			wantErr: ErrDomainHasPort,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NormalizeAndValidateTarget(tt.input, true)
+			if err != tt.wantErr {
+				t.Fatalf("NormalizeAndValidateTarget(%q) error = %v, want %v", tt.input, err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
+				return
+			}
+			if got.Domain != tt.want.Domain || got.Port != tt.want.Port {
+				t.Fatalf("NormalizeAndValidateTarget(%q) = %+v, want %+v", tt.input, got, tt.want)
+			}
+		})
 	}
 }

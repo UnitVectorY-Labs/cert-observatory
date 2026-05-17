@@ -4,7 +4,7 @@ cert-observatory Database Schema (PostgreSQL)
 Purpose:
 - Catalog TLS certificates (deduplicated by hash)
 - Store exact peer-provided certificate chains (deduplicated)
-- Track latest chain per domain plus historical unique chains ever observed
+- Track latest chain per domain/port plus historical unique chains ever observed
 - Track rate limiting timestamps and basic failure/backoff for automated crawling
 
 Non-goals:
@@ -14,15 +14,15 @@ Non-goals:
 Assumptions:
 - Domain normalization occurs in the application layer (lowercase, no trailing dot)
 - Crawling is TLS-only and SNI is always used
-- Port is implicitly 443 for now
+- Port defaults to 443 and is part of the crawl target identity
 - Certificate hash is sha256 over DER bytes, stored as 32-byte bytea
 - Chain hash is sha256 over the ordered list of certificate hashes (application-defined encoding)
 
 Recommended transaction pattern:
 - Insert missing certificates (upsert by hash)
 - Insert missing chain (upsert by hash)
-- Update domain current_chain_hash and timestamps
-- Upsert domain_chains association
+- Update domain/port current_chain_hash and timestamps
+- Upsert domain_chains association for the domain/port
 */
 
 BEGIN;
@@ -145,8 +145,9 @@ CREATE INDEX IF NOT EXISTS idx_chains_cert_hashes
 ----------------------------
 
 CREATE TABLE IF NOT EXISTS domains (
-  -- Normalized domain string as primary key
-  domain text PRIMARY KEY,
+  -- Normalized domain string plus TCP port identify the crawl target
+  domain text NOT NULL,
+  port integer NOT NULL DEFAULT 443,
 
   first_seen_at timestamptz NOT NULL DEFAULT now(),
 
@@ -179,12 +180,16 @@ CREATE TABLE IF NOT EXISTS domains (
   -- Light DB-side guards. Full validation and canonicalization occurs in the application.
   CHECK (domain = lower(domain)),
   CHECK (right(domain, 1) <> '.'),
-  CHECK (length(domain) BETWEEN 1 AND 253)
+  CHECK (length(domain) BETWEEN 1 AND 253),
+  CHECK (port BETWEEN 1 AND 65535),
+
+  PRIMARY KEY (domain, port)
 );
 
 COMMENT ON TABLE domains IS
-'Normalized domain targets (TLS SNI). Stores latest chain pointer, rate limit timestamps, and automated backoff state.';
-COMMENT ON COLUMN domains.domain IS 'Normalized domain (lowercase, no trailing dot). Primary key.';
+'Normalized domain targets (TLS SNI plus TCP port). Stores latest chain pointer, rate limit timestamps, and automated backoff state.';
+COMMENT ON COLUMN domains.domain IS 'Normalized domain (lowercase, no trailing dot).';
+COMMENT ON COLUMN domains.port IS 'TCP port used for TLS certificate observation. Defaults to 443.';
 COMMENT ON COLUMN domains.popular_domain IS 'True if the domain ever appeared on an imported popular list.';
 COMMENT ON COLUMN domains.auto_crawl IS 'True if automated crawling is enabled for this domain.';
 COMMENT ON COLUMN domains.current_chain_hash IS 'Latest successful chain_hash observed for this domain.';
@@ -214,8 +219,9 @@ CREATE INDEX IF NOT EXISTS idx_domains_current_chain
 ----------------------------
 
 CREATE TABLE IF NOT EXISTS domain_chains (
-  -- Composite primary key: one row per (domain, chain) pair
-  domain     text NOT NULL REFERENCES domains(domain) ON DELETE CASCADE,
+  -- Composite primary key: one row per (domain, port, chain) tuple
+  domain     text NOT NULL,
+  port       integer NOT NULL DEFAULT 443,
   chain_hash bytea NOT NULL REFERENCES chains(chain_hash) ON DELETE RESTRICT,
 
   -- When this chain was first observed for this domain
@@ -230,20 +236,23 @@ CREATE TABLE IF NOT EXISTS domain_chains (
   -- How the most recent observation was triggered
   last_mode     crawl_mode NOT NULL,
 
-  PRIMARY KEY (domain, chain_hash),
+  PRIMARY KEY (domain, port, chain_hash),
+  FOREIGN KEY (domain, port) REFERENCES domains(domain, port) ON DELETE CASCADE,
+  CHECK (port BETWEEN 1 AND 65535),
   CHECK (octet_length(chain_hash) = 32),
   CHECK (last_seen_at >= first_seen_at),
   CHECK (seen_count >= 1)
 );
 
 COMMENT ON TABLE domain_chains IS
-'One row per unique chain ever observed for a domain. No duplicates on oscillation between chains.';
+'One row per unique chain ever observed for a domain/port. No duplicates on oscillation between chains.';
+COMMENT ON COLUMN domain_chains.port IS 'TCP port used when this chain was observed for the domain.';
 COMMENT ON COLUMN domain_chains.first_seen_at IS 'When this chain was first observed for this domain.';
 COMMENT ON COLUMN domain_chains.last_seen_at IS 'When this chain was last observed for this domain.';
 COMMENT ON COLUMN domain_chains.seen_count IS 'Total number of successful observations of this chain for this domain.';
 COMMENT ON COLUMN domain_chains.last_mode IS 'How the most recent observation was triggered.';
 
--- Reverse lookup: which domains have ever served this chain
+-- Reverse lookup: which domain/port targets have ever served this chain
 CREATE INDEX IF NOT EXISTS idx_domain_chains_chain_hash
   ON domain_chains (chain_hash);
 

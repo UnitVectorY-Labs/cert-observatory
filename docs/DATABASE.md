@@ -53,11 +53,12 @@ Deduplicated peer-provided chains. A chain is the ordered list returned by the s
 
 ### domains
 
-Normalized domain targets (TLS SNI). Stores latest chain pointer, rate limit timestamps, and automated backoff state.
+Normalized domain targets (TLS SNI plus TCP port). Stores latest chain pointer, rate limit timestamps, and automated backoff state.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `domain` | text (PK) | Normalized domain (lowercase, no trailing dot) |
+| `port` | integer (PK) | TCP port used for TLS observation, defaults to 443 |
 | `first_seen_at` | timestamptz | When this domain was first seen |
 | `popular_domain` | boolean | True if domain appeared on imported popular list |
 | `auto_crawl` | boolean | True if automated crawling is enabled |
@@ -74,11 +75,12 @@ Normalized domain targets (TLS SNI). Stores latest chain pointer, rate limit tim
 
 ### domain_chains
 
-One row per unique chain ever observed for a domain. No duplicates on oscillation between chains.
+One row per unique chain ever observed for a domain and port. No duplicates on oscillation between chains.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `domain` | text (PK) | Reference to domains table |
+| `port` | integer (PK) | TCP port used when this chain was observed |
 | `chain_hash` | bytea (PK) | Reference to chains table |
 | `first_seen_at` | timestamptz | When this chain was first observed for this domain |
 | `last_seen_at` | timestamptz | When this chain was last observed for this domain |
@@ -99,8 +101,8 @@ Enum indicating how a crawl was triggered:
 ### Storage Goals
 
 - **Content-addressed keys**: Certificates and chains are keyed by SHA-256 hashes
-- **Domain text as primary key**: No surrogate integer IDs for domains
-- **One row per unique chain per domain**: No duplicates when oscillating between chains
+- **Domain and port as primary key**: No surrogate integer IDs for crawl targets
+- **One row per unique chain per domain and port**: No duplicates when oscillating between chains
 
 ### Non-goals
 

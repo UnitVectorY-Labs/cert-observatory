@@ -17,6 +17,7 @@ import (
 // DomainResult represents domain data from the database.
 type DomainResult struct {
 	Domain    string
+	Port      int
 	HasChain  bool
 	Chain     []*CertificateResult
 	UpdatedAt time.Time
@@ -40,12 +41,14 @@ type CertificateResult struct {
 // CrawlOutput represents the output of a crawl operation.
 type CrawlOutput struct {
 	Domain string
+	Port   int
 	Chain  []*CertificateResult
 }
 
 // CrawlResultInput is the input for recording a crawl result.
 type CrawlResultInput struct {
 	Domain  string
+	Port    int
 	Success bool
 	Forced  bool
 	Chain   []*CertificateResult
@@ -94,6 +97,8 @@ type CertViewData struct {
 // ResultsViewData is the view model for the results template.
 type ResultsViewData struct {
 	Domain             string
+	Port               int
+	DisplayTarget      string
 	IsCached           bool
 	CacheAge           string
 	CanForceRefresh    bool
@@ -409,8 +414,14 @@ func assignChainLabelsAndColors(chain []*CertViewData) {
 }
 
 func buildResultsViewData(result *DomainResult, isCached bool, canForce bool, waitTime time.Duration, lastCrawlFailed bool) *ResultsViewData {
+	port := result.Port
+	if port == 0 {
+		port = 443
+	}
 	data := &ResultsViewData{
 		Domain:          result.Domain,
+		Port:            port,
+		DisplayTarget:   formatTarget(result.Domain, port),
 		IsCached:        isCached,
 		CanForceRefresh: canForce,
 		LastCrawlFailed: lastCrawlFailed,
@@ -433,4 +444,11 @@ func buildResultsViewData(result *DomainResult, isCached bool, canForce bool, wa
 	assignChainLabelsAndColors(data.Chain)
 
 	return data
+}
+
+func formatTarget(domain string, port int) string {
+	if port == 0 || port == 443 {
+		return domain
+	}
+	return fmt.Sprintf("%s:%d", domain, port)
 }

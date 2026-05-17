@@ -66,6 +66,8 @@ type Server struct {
 type Repository interface {
 	// GetDomainWithChain retrieves a domain and its current chain with certificates.
 	GetDomainWithChain(ctx context.Context, domain string) (*DomainResult, error)
+	// GetDomainWithChainForPort retrieves a domain target and its current chain with certificates.
+	GetDomainWithChainForPort(ctx context.Context, domain string, port int) (*DomainResult, error)
 	// GetCertificateByHash retrieves a certificate by its hash.
 	GetCertificateByHash(ctx context.Context, hash []byte) (*CertificateResult, error)
 	// FindCertificatesBySKI finds certificates whose SKI matches the given value.
@@ -73,12 +75,20 @@ type Repository interface {
 	FindCertificatesBySKI(ctx context.Context, ski []byte) ([]*CertificateResult, error)
 	// CanStandardRefresh checks if a standard refresh is allowed for the domain.
 	CanStandardRefresh(ctx context.Context, domain string, window time.Duration) (bool, time.Duration, error)
+	// CanStandardRefreshForPort checks if a standard refresh is allowed for the domain target.
+	CanStandardRefreshForPort(ctx context.Context, domain string, port int, window time.Duration) (bool, time.Duration, error)
 	// CanForcedRefresh checks if a forced refresh is allowed for the domain.
 	CanForcedRefresh(ctx context.Context, domain string, window time.Duration) (bool, time.Duration, error)
+	// CanForcedRefreshForPort checks if a forced refresh is allowed for the domain target.
+	CanForcedRefreshForPort(ctx context.Context, domain string, port int, window time.Duration) (bool, time.Duration, error)
 	// AcquireLock tries to acquire a crawl lock for the domain.
 	AcquireLock(ctx context.Context, domain string, lockID string, ttl time.Duration) (bool, error)
+	// AcquireLockForPort tries to acquire a crawl lock for the domain target.
+	AcquireLockForPort(ctx context.Context, domain string, port int, lockID string, ttl time.Duration) (bool, error)
 	// ReleaseLock releases a crawl lock for the domain.
 	ReleaseLock(ctx context.Context, domain string, lockID string) error
+	// ReleaseLockForPort releases a crawl lock for the domain target.
+	ReleaseLockForPort(ctx context.Context, domain string, port int, lockID string) error
 	// RecordCrawlResult records the result of a crawl operation.
 	RecordCrawlResult(ctx context.Context, result *CrawlResultInput) error
 	// StoreCertificate stores a single certificate in the database.
@@ -89,6 +99,8 @@ type Repository interface {
 type Crawler interface {
 	// Crawl performs a TLS handshake and returns the certificate chain.
 	Crawl(ctx context.Context, domain string) (*CrawlOutput, error)
+	// CrawlPort performs a TLS handshake on the specified port and returns the certificate chain.
+	CrawlPort(ctx context.Context, domain string, port int) (*CrawlOutput, error)
 }
 
 // New creates a new web server.

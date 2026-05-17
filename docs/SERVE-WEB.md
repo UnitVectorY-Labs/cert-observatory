@@ -86,6 +86,7 @@ Force refresh is only available when server-side policy allows it.
 The web server includes security hardening:
 
 - Input validation and normalization for domain names
+- Port 443 is used by default. Supplying the `?port` query parameter to `/inspect` or `/refresh` enables `host:port` input such as `www.example.com:8443`.
 - CSRF protection for state-changing operations
 - SQL injection prevention via parameterized queries
 - XSS prevention via HTML escaping
