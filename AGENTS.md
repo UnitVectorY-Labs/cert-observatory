@@ -46,6 +46,8 @@ When an agent is developing and debugging it is allowed to use the Docker image 
 
 The main README.md file provides a minimal overview of the project. The majority of the documentation is contained within the docs/ directory with separate markdown files for different aspects of the project including one for each command as well as one for the database design, and additional files for each major component.
 
+When screenshots are requested, use the Playwright MCP server to capture and post the images directly to the pull request — never commit screenshot files to the repository.
+
 ## Database Schema and Migrations
 
 - SQL-first migrations: schema changes are authored as ordered SQL migrations in `db/migrations/` (the migration history is the source of truth, not an ORM).
