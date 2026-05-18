@@ -81,6 +81,7 @@ type CertViewData struct {
 	SignatureAlgorithm   string
 	PublicKeyInfo        string
 	SANs                 []string
+	CAIssuersURLs        []string
 	KeyUsage             string
 	ExtKeyUsage          string
 	SKI                  string
@@ -179,6 +180,7 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 			view.SANs = append(view.SANs, "Email:"+email)
 		}
 	}
+	view.CAIssuersURLs = append(view.CAIssuersURLs, cert.IssuingCertificateURL...)
 
 	// Key Usage
 	view.KeyUsage = formatKeyUsage(cert.KeyUsage)

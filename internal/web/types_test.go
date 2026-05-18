@@ -166,6 +166,49 @@ func TestCertToViewData_Fingerprints(t *testing.T) {
 	}
 }
 
+func TestCertToViewData_CAIssuersURLs(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate ECDSA key: %v", err)
+	}
+
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "test"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		BasicConstraintsValid: true,
+		IssuingCertificateURL: []string{
+			"http://cacerts.digicert.cn/DigiCertGlobalRootG2.crt",
+			"http://cacerts.digicert.com/DigiCertGlobalRootG2.crt",
+		},
+	}
+
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("failed to create certificate: %v", err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("failed to parse certificate: %v", err)
+	}
+
+	view := certToViewData(&CertificateResult{
+		CertHash:  make([]byte, 32),
+		PEM:       "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n",
+		NotBefore: cert.NotBefore,
+		NotAfter:  cert.NotAfter,
+		Parsed:    cert,
+	})
+
+	if len(view.CAIssuersURLs) != 2 {
+		t.Fatalf("certToViewData CAIssuersURLs count = %d, want 2", len(view.CAIssuersURLs))
+	}
+	if view.CAIssuersURLs[0] != "http://cacerts.digicert.cn/DigiCertGlobalRootG2.crt" {
+		t.Errorf("first CA Issuers URL = %q", view.CAIssuersURLs[0])
+	}
+}
+
 func TestFormatHexBytes_Lowercase(t *testing.T) {
 	input := []byte{0xF8, 0x87, 0x8B, 0x2D, 0xBD}
 	result := formatHexBytes(input)

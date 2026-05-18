@@ -171,6 +171,18 @@
                             <div class="detail-box">{{$gc.ExtKeyUsage}}</div>
                         </div>
                         {{end}}
+                        {{if $gc.CAIssuersURLs}}
+                        <div class="detail-item">
+                            <div class="detail-label">CA Issuers URL</div>
+                            <div class="detail-box detail-box-mono">
+                                <div class="ca-issuers-list">
+                                    {{range $gc.CAIssuersURLs}}
+                                    <a class="ca-issuers-link" href="{{.}}" rel="noopener noreferrer" target="_blank">{{.}}</a>
+                                    {{end}}
+                                </div>
+                            </div>
+                        </div>
+                        {{end}}
                         {{if $gc.SANs}}
                         <div class="detail-item">
                             <div class="detail-label">Subject Alternative Names ({{len $gc.SANs}})</div>
@@ -337,6 +349,18 @@
                         <div class="detail-item">
                             <div class="detail-label">Extended Key Usage</div>
                             <div class="detail-box">{{$cert.ExtKeyUsage}}</div>
+                        </div>
+                        {{end}}
+                        {{if $cert.CAIssuersURLs}}
+                        <div class="detail-item">
+                            <div class="detail-label">CA Issuers URL</div>
+                            <div class="detail-box detail-box-mono">
+                                <div class="ca-issuers-list">
+                                    {{range $cert.CAIssuersURLs}}
+                                    <a class="ca-issuers-link" href="{{.}}" rel="noopener noreferrer" target="_blank">{{.}}</a>
+                                    {{end}}
+                                </div>
+                            </div>
                         </div>
                         {{end}}
 

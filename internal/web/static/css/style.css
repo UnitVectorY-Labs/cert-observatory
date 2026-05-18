@@ -35,7 +35,9 @@
     --color-emerald-700: oklch(50.8% 0.118 165.612);
     --color-emerald-900: oklch(37.8% 0.077 168.94);
     --color-sky-100: oklch(95.1% 0.026 236.824);
+    --color-sky-300: oklch(82.8% 0.111 230.318);
     --color-sky-400: oklch(74.6% 0.16 232.661);
+    --color-sky-700: oklch(50% 0.134 242.749);
     --color-sky-900: oklch(39.1% 0.09 240.876);
     --color-blue-50: oklch(97% 0.014 254.604);
     --color-blue-100: oklch(93.2% 0.032 255.585);
@@ -1869,6 +1871,36 @@ a {
   }
   &:where(.dark, .dark *) {
     color: var(--color-slate-300);
+  }
+}
+.ca-issuers-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 1);
+}
+.ca-issuers-link {
+  word-break: break-all;
+  color: var(--color-sky-700);
+  text-decoration-line: underline;
+  text-decoration-color: var(--color-sky-300);
+  text-underline-offset: 2px;
+  &:hover {
+    @media (hover: hover) {
+      color: var(--color-orange-700);
+    }
+  }
+  &:where(.dark, .dark *) {
+    color: var(--color-sky-300);
+  }
+  &:where(.dark, .dark *) {
+    text-decoration-color: var(--color-sky-700);
+  }
+  &:where(.dark, .dark *) {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-orange-300);
+      }
+    }
   }
 }
 .chain-section {
