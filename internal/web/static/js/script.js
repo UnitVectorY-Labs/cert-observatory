@@ -80,6 +80,26 @@ function copyPEM(button, certHash) {
     }
 }
 
+function switchCertDecodeTab(button, selected) {
+    var root = button && button.closest ? button.closest("[data-cert-tabs]") : null;
+    if (!root) {
+        return;
+    }
+
+    var buttons = root.querySelectorAll("[data-cert-tab-button]");
+    for (var i = 0; i < buttons.length; i++) {
+        var isActive = buttons[i].dataset.certTabButton === selected;
+        buttons[i].classList.toggle("is-active", isActive);
+        buttons[i].setAttribute("aria-selected", String(isActive));
+    }
+
+    var panels = root.querySelectorAll("[data-cert-tab-panel]");
+    for (var j = 0; j < panels.length; j++) {
+        var isSelected = panels[j].dataset.certTabPanel === selected;
+        panels[j].classList.toggle("hidden", !isSelected);
+    }
+}
+
 // Mermaid click callback: maps Mermaid node IDs to certificate indices.
 function selectTrustPathCertFromMermaid(nodeId) {
     var mapEntries = document.querySelectorAll(".tp-node-map");
