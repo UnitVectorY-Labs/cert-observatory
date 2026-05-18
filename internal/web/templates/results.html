@@ -15,7 +15,7 @@
             {{end}}
         </div>
         {{if and .CanForceRefresh .IsCached}}
-        <form method="POST" action="/refresh{{if ne .Port 443}}?port{{end}}" class="inline" hx-post="/refresh{{if ne .Port 443}}?port{{end}}" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
+        <form method="POST" action="/refresh" class="inline" hx-post="/refresh" hx-target="#results" hx-indicator="#loading" hx-on::before-request="clearResults()">
             <input type="hidden" name="domain" value="{{.DisplayTarget}}">
             <button type="submit" class="btn-secondary">
                 <span class="htmx-indicator h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-slate-100 dark:border-slate-500 dark:border-t-slate-100"></span>

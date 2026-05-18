@@ -167,7 +167,7 @@ func TestHandleIndex(t *testing.T) {
 	}
 }
 
-func TestHandleIndex_PortModePreservesInspectQuery(t *testing.T) {
+func TestHandleIndex_InspectFormUsesDefaultEndpoint(t *testing.T) {
 	repo := &mockRepository{}
 	crawler := &mockCrawler{}
 
@@ -176,7 +176,7 @@ func TestHandleIndex_PortModePreservesInspectQuery(t *testing.T) {
 		t.Fatalf("Failed to create server: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/?port", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
 	server.handleIndex(w, req)
@@ -186,11 +186,11 @@ func TestHandleIndex_PortModePreservesInspectQuery(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if !strings.Contains(body, `action="/inspect?port"`) {
-		t.Errorf("expected inspect form action to preserve port mode, got: %s", body)
+	if !strings.Contains(body, `action="/inspect"`) {
+		t.Errorf("expected inspect form action to use default endpoint, got: %s", body)
 	}
-	if !strings.Contains(body, `hx-post="/inspect?port"`) {
-		t.Errorf("expected HTMX post target to preserve port mode, got: %s", body)
+	if !strings.Contains(body, `hx-post="/inspect"`) {
+		t.Errorf("expected HTMX post target to use default endpoint, got: %s", body)
 	}
 }
 
@@ -223,7 +223,7 @@ func TestHandleInspect_ValidDomain(t *testing.T) {
 	}
 }
 
-func TestHandleInspect_ValidDomainWithPortMode(t *testing.T) {
+func TestHandleInspect_ValidDomainWithPort(t *testing.T) {
 	repo := &mockRepository{
 		canStandard:  true,
 		canForced:    true,
@@ -239,7 +239,7 @@ func TestHandleInspect_ValidDomainWithPortMode(t *testing.T) {
 	form := url.Values{}
 	form.Set("domain", "smtp.gmail.com:465")
 
-	req := httptest.NewRequest(http.MethodPost, "/inspect?port", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/inspect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Host = "localhost:8080"
 
@@ -265,7 +265,7 @@ func TestHandleInspect_InvalidDomain(t *testing.T) {
 	}{
 		{"empty domain", "", "enter a domain"},
 		{"url with scheme", "https://example.com", "without http"},
-		{"domain with port", "example.com:443", "without a port"},
+		{"invalid port", "example.com:abc", "Port must be a number"},
 		{"domain with path", "example.com/path", "without any path"},
 		{"ip address", "192.168.1.1", "IP addresses are not allowed"},
 	}
@@ -294,9 +294,6 @@ func TestHandleInspect_InvalidDomain(t *testing.T) {
 			body := w.Body.String()
 			if !strings.Contains(strings.ToLower(body), strings.ToLower(tt.wantErr)) {
 				t.Errorf("Expected error containing %q, got: %s", tt.wantErr, body)
-			}
-			if tt.name == "domain with port" && strings.Contains(body, "?port") {
-				t.Errorf("port-mode error should not disclose hidden query parameter, got: %s", body)
 			}
 		})
 	}
