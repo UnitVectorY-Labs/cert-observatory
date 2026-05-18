@@ -70,6 +70,8 @@ type Repository interface {
 	GetDomainWithChainForPort(ctx context.Context, domain string, port int) (*DomainResult, error)
 	// GetCertificateByHash retrieves a certificate by its hash.
 	GetCertificateByHash(ctx context.Context, hash []byte) (*CertificateResult, error)
+	// CertificateExists checks whether a certificate is already present in the catalog.
+	CertificateExists(ctx context.Context, hash []byte) (bool, error)
 	// FindCertificatesBySKI finds certificates whose SKI matches the given value.
 	// Used for building the certificate trust path graph.
 	FindCertificatesBySKI(ctx context.Context, ski []byte) ([]*CertificateResult, error)
