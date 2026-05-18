@@ -1016,12 +1016,12 @@ func TestHandleManualCert_MultiplePEMBlocks(t *testing.T) {
 }
 
 func TestHandleManualCert_TrailingPEMBlock(t *testing.T) {
-	caCert, caKey := generateTestCA(t)
-	leafCert := generateTestLeaf(t, caCert, caKey)
-
 	// Submit a certificate followed by a non-CERTIFICATE PEM block (EC PRIVATE KEY).
 	// The handler now parses all blocks in a loop and rejects any block that is not
 	// a CERTIFICATE, so this should result in "Invalid PEM".
+	rootCert, rootKey := generateTestCA(t)
+	leafCert := generateTestLeaf(t, rootCert, rootKey)
+
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -1058,9 +1058,6 @@ func TestHandleManualCert_TrailingPEMBlock(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "Invalid PEM") {
 		t.Errorf("expected 'Invalid PEM' error for non-certificate PEM block, got: %s", w.Body.String())
 	}
-
-	_ = caCert
-	_ = caKey
 }
 
 func TestHandleManualCert_TrailingNonPEMJunk(t *testing.T) {
@@ -1530,7 +1527,10 @@ func TestHandleManualCert_ValidChain_TwoCerts(t *testing.T) {
 }
 
 // TestHandleManualCert_ValidChain_ThreeCerts verifies that uploading leaf +
-// intermediate + root succeeds when the root is trusted in the DB.
+// intermediate succeeds when root is trusted in the DB.  The name says "three
+// certs" because the chain conceptually has three links (leaf → intermediate →
+// root in DB), but only two certificates are uploaded; the root is matched via
+// the intermediate's AKI against the DB mock.
 func TestHandleManualCert_ValidChain_ThreeCerts(t *testing.T) {
 	rootCert, rootKey := generateTestCA(t)
 	intCert, intKey := generateTestIntermediate(t, rootCert, rootKey)
@@ -1544,10 +1544,10 @@ func TestHandleManualCert_ValidChain_ThreeCerts(t *testing.T) {
 		t.Fatalf("create server: %v", err)
 	}
 
-	// leaf → intermediate (leaf signed by intermediate, intermediate signed by root)
-	threeCerts := pemEncodeTest(leafCert.Raw) + pemEncodeTest(intCert.Raw)
+	// Upload leaf + intermediate; root is already in the DB.
+	twoCerts := pemEncodeTest(leafCert.Raw) + pemEncodeTest(intCert.Raw)
 	form := url.Values{}
-	form.Set("pem", threeCerts)
+	form.Set("pem", twoCerts)
 	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("HX-Request", "true")
