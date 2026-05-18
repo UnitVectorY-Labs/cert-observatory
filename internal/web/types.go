@@ -6,6 +6,8 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -79,12 +81,14 @@ type CertViewData struct {
 	SignatureAlgorithm   string
 	PublicKeyInfo        string
 	SANs                 []string
+	CAIssuersURLs        []string
 	KeyUsage             string
 	ExtKeyUsage          string
 	SKI                  string
 	AKI                  string
 	SHA1Fingerprint      string
 	SHA256Fingerprint    string
+	AdvancedDecode       string
 	PossibleIssuers      []string
 	// CertLabel is the human-readable label for this certificate's role in the chain
 	CertLabel string
@@ -162,6 +166,7 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 	view.SerialNumber = formatSerialNumber(cert.SerialNumber.Bytes())
 	view.SignatureAlgorithm = cert.SignatureAlgorithm.String()
 	view.PublicKeyInfo = formatPublicKey(cert)
+	view.AdvancedDecode = formatAdvancedCertificate(cert)
 
 	// Subject Alternative Names
 	if len(cert.DNSNames) > 0 || len(cert.IPAddresses) > 0 || len(cert.EmailAddresses) > 0 {
@@ -175,6 +180,7 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 			view.SANs = append(view.SANs, "Email:"+email)
 		}
 	}
+	view.CAIssuersURLs = append(view.CAIssuersURLs, cert.IssuingCertificateURL...)
 
 	// Key Usage
 	view.KeyUsage = formatKeyUsage(cert.KeyUsage)
@@ -189,6 +195,158 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 		sha256Sum := sha256.Sum256(cert.Raw)
 		view.SHA256Fingerprint = formatHexBytes(sha256Sum[:])
 	}
+}
+
+func formatAdvancedCertificate(cert *x509.Certificate) string {
+	var b strings.Builder
+
+	writeAdvancedLine(&b, 0, "Certificate:")
+	writeAdvancedLine(&b, 1, "Data:")
+	writeAdvancedLine(&b, 2, "Version: %d (0x%x)", cert.Version, cert.Version-1)
+	writeAdvancedLine(&b, 2, "Serial Number:")
+	writeWrappedHex(&b, 3, cert.SerialNumber.Bytes(), 15)
+	writeAdvancedLine(&b, 2, "Signature Algorithm: %s", cert.SignatureAlgorithm)
+	writeAdvancedLine(&b, 2, "Issuer: %s", cert.Issuer.String())
+	writeAdvancedLine(&b, 2, "Validity")
+	writeAdvancedLine(&b, 3, "Not Before: %s", cert.NotBefore.UTC().Format("Jan 02 15:04:05 2006 GMT"))
+	writeAdvancedLine(&b, 3, "Not After : %s", cert.NotAfter.UTC().Format("Jan 02 15:04:05 2006 GMT"))
+	writeAdvancedLine(&b, 2, "Subject: %s", cert.Subject.String())
+	writeAdvancedLine(&b, 2, "Subject Public Key Info:")
+	writeAdvancedLine(&b, 3, "Public Key Algorithm: %s", cert.PublicKeyAlgorithm)
+	writeAdvancedLine(&b, 3, "Public-Key: %s", formatPublicKey(cert))
+
+	if len(cert.DNSNames) > 0 || len(cert.IPAddresses) > 0 || len(cert.EmailAddresses) > 0 || len(cert.URIs) > 0 {
+		writeAdvancedLine(&b, 2, "Subject Alternative Name:")
+		writeAdvancedLine(&b, 3, "%s", formatSubjectAlternativeNames(cert))
+	}
+
+	writeAdvancedLine(&b, 2, "X509v3 extensions:")
+	for _, ext := range cert.Extensions {
+		writeAdvancedExtension(&b, ext)
+	}
+	if len(cert.UnhandledCriticalExtensions) > 0 {
+		writeAdvancedLine(&b, 2, "Unhandled Critical Extensions:")
+		for _, oid := range cert.UnhandledCriticalExtensions {
+			writeAdvancedLine(&b, 3, "%s", oid.String())
+		}
+	}
+
+	writeAdvancedLine(&b, 1, "Signature Algorithm: %s", cert.SignatureAlgorithm)
+	writeWrappedHex(&b, 2, cert.Signature, 18)
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func writeAdvancedLine(b *strings.Builder, indent int, format string, args ...interface{}) {
+	b.WriteString(strings.Repeat("    ", indent))
+	fmt.Fprintf(b, format, args...)
+	b.WriteByte('\n')
+}
+
+func writeWrappedHex(b *strings.Builder, indent int, data []byte, perLine int) {
+	if len(data) == 0 {
+		writeAdvancedLine(b, indent, "<empty>")
+		return
+	}
+	for start := 0; start < len(data); start += perLine {
+		end := start + perLine
+		if end > len(data) {
+			end = len(data)
+		}
+		writeAdvancedLine(b, indent, "%s", formatHexBytes(data[start:end]))
+	}
+}
+
+func writeAdvancedExtension(b *strings.Builder, ext pkix.Extension) {
+	name := extensionName(ext.Id)
+	critical := ""
+	if ext.Critical {
+		critical = " critical"
+	}
+	writeAdvancedLine(b, 3, "%s%s:", name, critical)
+
+	if formatted, ok := formatKnownExtension(ext); ok {
+		for _, line := range strings.Split(formatted, "\n") {
+			writeAdvancedLine(b, 4, "%s", line)
+		}
+		return
+	}
+
+	writeWrappedHex(b, 4, ext.Value, 16)
+}
+
+func extensionName(oid asn1.ObjectIdentifier) string {
+	known := map[string]string{
+		"2.5.29.14":               "X509v3 Subject Key Identifier",
+		"2.5.29.15":               "X509v3 Key Usage",
+		"2.5.29.17":               "X509v3 Subject Alternative Name",
+		"2.5.29.19":               "X509v3 Basic Constraints",
+		"2.5.29.31":               "X509v3 CRL Distribution Points",
+		"2.5.29.32":               "X509v3 Certificate Policies",
+		"2.5.29.35":               "X509v3 Authority Key Identifier",
+		"2.5.29.37":               "X509v3 Extended Key Usage",
+		"1.3.6.1.5.5.7.1.1":       "Authority Information Access",
+		"1.3.6.1.5.5.7.1.12":      "X509v3 Logotype",
+		"1.3.6.1.4.1.11129.2.4.2": "CT Precertificate SCTs",
+	}
+	if name, ok := known[oid.String()]; ok {
+		return name
+	}
+	return oid.String()
+}
+
+func formatKnownExtension(ext pkix.Extension) (string, bool) {
+	switch ext.Id.String() {
+	case "2.5.29.14", "2.5.29.35":
+		var keyID []byte
+		if _, err := asn1.Unmarshal(ext.Value, &keyID); err == nil && len(keyID) > 0 {
+			return formatHexBytes(keyID), true
+		}
+	case "2.5.29.15":
+		return formatBitStringExtension(ext.Value), true
+	case "2.5.29.19":
+		return formatBasicConstraintsExtension(ext.Value), true
+	}
+	return "", false
+}
+
+func formatBitStringExtension(value []byte) string {
+	var bits asn1.BitString
+	if _, err := asn1.Unmarshal(value, &bits); err != nil {
+		return formatHexBytes(value)
+	}
+	return formatHexBytes(bits.Bytes)
+}
+
+func formatBasicConstraintsExtension(value []byte) string {
+	var bc struct {
+		IsCA       bool `asn1:"optional"`
+		MaxPathLen int  `asn1:"optional,default:-1"`
+	}
+	if _, err := asn1.Unmarshal(value, &bc); err != nil {
+		return formatHexBytes(value)
+	}
+	if bc.MaxPathLen >= 0 {
+		return fmt.Sprintf("CA:%t, pathlen:%d", bc.IsCA, bc.MaxPathLen)
+	}
+	return fmt.Sprintf("CA:%t", bc.IsCA)
+}
+
+func formatSubjectAlternativeNames(cert *x509.Certificate) string {
+	var names []string
+	for _, name := range cert.DNSNames {
+		names = append(names, "DNS:"+name)
+	}
+	for _, ip := range cert.IPAddresses {
+		names = append(names, "IP Address:"+ip.String())
+	}
+	for _, email := range cert.EmailAddresses {
+		names = append(names, "email:"+email)
+	}
+	for _, uri := range cert.URIs {
+		names = append(names, "URI:"+uri.String())
+	}
+	return strings.Join(names, ", ")
 }
 
 func extractCN(dn string) string {

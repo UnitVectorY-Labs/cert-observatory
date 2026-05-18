@@ -90,7 +90,13 @@
                             </button>
                         </div>
                     </div>
-                    <div class="details-stack">
+                    <div class="details-column" data-cert-tabs>
+                        <div class="cert-tab-list" role="tablist" aria-label="Certificate decode view">
+                            <button type="button" class="cert-tab-button is-active" role="tab" aria-selected="true" data-cert-tab-button="basic" onclick="switchCertDecodeTab(this, 'basic')">Basic</button>
+                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="advanced" onclick="switchCertDecodeTab(this, 'advanced')">Advanced</button>
+                        </div>
+                        <div class="cert-tab-panel" data-cert-tab-panel="basic">
+                        <div class="details-stack">
                         <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Subject</div>
@@ -165,6 +171,18 @@
                             <div class="detail-box">{{$gc.ExtKeyUsage}}</div>
                         </div>
                         {{end}}
+                        {{if $gc.CAIssuersURLs}}
+                        <div class="detail-item">
+                            <div class="detail-label">CA Issuers URL</div>
+                            <div class="detail-box detail-box-mono">
+                                <div class="ca-issuers-list">
+                                    {{range $gc.CAIssuersURLs}}
+                                    <a class="ca-issuers-link" href="{{.}}" rel="noopener noreferrer" target="_blank">{{.}}</a>
+                                    {{end}}
+                                </div>
+                            </div>
+                        </div>
+                        {{end}}
                         {{if $gc.SANs}}
                         <div class="detail-item">
                             <div class="detail-label">Subject Alternative Names ({{len $gc.SANs}})</div>
@@ -203,6 +221,11 @@
                             <div class="detail-box detail-box-mono hex-value">{{$gc.SHA1Fingerprint}}</div>
                         </div>
                         {{end}}
+                        </div>
+                        </div>
+                        <div class="cert-tab-panel hidden" data-cert-tab-panel="advanced">
+                            <pre class="advanced-decode">{{$gc.AdvancedDecode}}</pre>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -240,7 +263,13 @@
                             </button>
                         </div>
                     </div>
-                    <div class="details-stack">
+                    <div class="details-column" data-cert-tabs>
+                        <div class="cert-tab-list" role="tablist" aria-label="Certificate decode view">
+                            <button type="button" class="cert-tab-button is-active" role="tab" aria-selected="true" data-cert-tab-button="basic" onclick="switchCertDecodeTab(this, 'basic')">Basic</button>
+                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="advanced" onclick="switchCertDecodeTab(this, 'advanced')">Advanced</button>
+                        </div>
+                        <div class="cert-tab-panel" data-cert-tab-panel="basic">
+                        <div class="details-stack">
                         <div class="detail-grid">
                             <div class="detail-item">
                                 <div class="detail-label">Subject</div>
@@ -322,6 +351,18 @@
                             <div class="detail-box">{{$cert.ExtKeyUsage}}</div>
                         </div>
                         {{end}}
+                        {{if $cert.CAIssuersURLs}}
+                        <div class="detail-item">
+                            <div class="detail-label">CA Issuers URL</div>
+                            <div class="detail-box detail-box-mono">
+                                <div class="ca-issuers-list">
+                                    {{range $cert.CAIssuersURLs}}
+                                    <a class="ca-issuers-link" href="{{.}}" rel="noopener noreferrer" target="_blank">{{.}}</a>
+                                    {{end}}
+                                </div>
+                            </div>
+                        </div>
+                        {{end}}
 
                         {{if $cert.SANs}}
                         <div class="detail-item">
@@ -363,6 +404,11 @@
                             <div class="detail-box detail-box-mono hex-value">{{$cert.SHA1Fingerprint}}</div>
                         </div>
                         {{end}}
+                        </div>
+                        </div>
+                        <div class="cert-tab-panel hidden" data-cert-tab-panel="advanced">
+                            <pre class="advanced-decode">{{$cert.AdvancedDecode}}</pre>
+                        </div>
                     </div>
                 </div>
             </div>
