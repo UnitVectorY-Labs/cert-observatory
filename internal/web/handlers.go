@@ -40,11 +40,9 @@ const maxManualCerts = 5
 
 // handleManualCert handles manual PEM certificate upload (POST only).
 // This is a "secret" feature unlocked by visiting /?manual.
-// Accepts 1 to maxManualCerts PEM CERTIFICATE blocks. When multiple certificates
-// are provided they must form an ordered chain (cert[i] is signed by cert[i+1]).
-// The last certificate in the chain must be signed by a trusted certificate in
-// the database, or be a self-signed cert whose public key is already vouched for
-// by a cross-signed equivalent in the DB.
+// Accepts 1 to maxManualCerts PEM CERTIFICATE blocks. Each certificate must be
+// currently valid and independently trace to a trusted certificate already in
+// the database, optionally using other uploaded certificates as intermediates.
 func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.renderManualError(w, r, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
@@ -96,67 +94,9 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// When multiple certificates are provided, validate that they form an ordered
-	// chain: cert[i] must be cryptographically signed by cert[i+1].
-	for i := 0; i < len(x509Certs)-1; i++ {
-		if err := x509Certs[i].CheckSignatureFrom(x509Certs[i+1]); err != nil {
-			s.renderManualError(w, r, "Invalid Chain",
-				fmt.Sprintf("Certificate %d (%s) is not signed by certificate %d (%s). Certificates must be provided in chain order from leaf to issuer.",
-					i+1, x509Certs[i].Subject.CommonName,
-					i+2, x509Certs[i+1].Subject.CommonName),
-				http.StatusBadRequest)
-			return
-		}
-	}
-
-	// Verify that the last certificate in the chain (or the single certificate)
-	// traces back to a trusted root already in the database.
-	//
-	// Lookup key selection:
-	//   - Use AKI when present (standard: AKI points to the issuer's SKI).
-	//   - For self-signed certs without AKI, fall back to the cert's own SKI to
-	//     locate a cross-signed equivalent (same public key, different trusted issuer).
-	lastCert := x509Certs[len(x509Certs)-1]
-	lastInfo := certutil.ParseX509Certificate(lastCert)
-
-	lookupKey := lastInfo.AKI
-	if len(lookupKey) == 0 {
-		if isSignatureSelfSigned(&CertificateResult{Parsed: lastCert}) {
-			lookupKey = lastInfo.SKI
-		}
-		if len(lookupKey) == 0 {
-			s.renderManualError(w, r, "Untrusted Certificate", "The last certificate in the chain does not have an Authority Key Identifier (AKI) extension. Cannot verify its issuer.", http.StatusBadRequest)
-			return
-		}
-	}
-
-	candidates, err := s.repo.FindCertificatesBySKI(r.Context(), lookupKey)
-	if err != nil {
-		s.logger.Error("failed to look up issuer candidates", "error", err)
-		s.renderManualError(w, r, "Database Error", "Could not look up issuer certificates.", http.StatusInternalServerError)
-		return
-	}
-
-	trusted := false
-	for _, candidate := range candidates {
-		if candidate.Parsed == nil {
-			continue
-		}
-		// CheckSignatureFrom validates the signature AND enforces that the candidate
-		// is a CA certificate (IsCA=true with KeyUsageCertSign where relevant).
-		if err := lastCert.CheckSignatureFrom(candidate.Parsed); err == nil {
-			trusted = true
-			break
-		}
-	}
-
-	if !trusted {
-		s.renderManualError(w, r, "Untrusted Certificate", "The certificate chain is not signed by any trusted certificate in the database. Only certificates with a valid chain of trust can be uploaded.", http.StatusBadRequest)
-		return
-	}
-
 	// Build CertificateResult objects and store every certificate in the database.
 	uploaded := make([]*CertificateResult, len(x509Certs))
+	uploadedBySKI := make(map[string][]*CertificateResult)
 	for i, x509Cert := range x509Certs {
 		certInfo := certutil.ParseX509Certificate(x509Cert)
 		uploaded[i] = &CertificateResult{
@@ -172,7 +112,23 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 			Parsed:    certInfo.Parsed,
 			Position:  i + 1,
 		}
-		if err := s.repo.StoreCertificate(r.Context(), uploaded[i]); err != nil {
+		if len(uploaded[i].SKI) > 0 {
+			uploadedBySKI[string(uploaded[i].SKI)] = append(uploadedBySKI[string(uploaded[i].SKI)], uploaded[i])
+		}
+	}
+
+	now := time.Now()
+	for i, cert := range uploaded {
+		if err := s.validateManualCertificate(r.Context(), cert, uploadedBySKI, now, map[string]bool{}); err != nil {
+			s.renderManualError(w, r, "Untrusted Certificate",
+				fmt.Sprintf("Certificate %d (%s) is not acceptable for manual import: %v", i+1, certSubjectDN(cert), err),
+				http.StatusBadRequest)
+			return
+		}
+	}
+
+	for _, cert := range uploaded {
+		if err := s.repo.StoreCertificate(r.Context(), cert); err != nil {
 			s.logger.Error("failed to store manual certificate", "error", err)
 			s.renderManualError(w, r, "Storage Error", "Could not store the certificate.", http.StatusInternalServerError)
 			return
@@ -220,6 +176,74 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 
 	s.renderManualResults(w, r, data)
 }
+
+func (s *Server) validateManualCertificate(ctx context.Context, cert *CertificateResult, uploadedBySKI map[string][]*CertificateResult, now time.Time, visiting map[string]bool) error {
+	if cert == nil || cert.Parsed == nil {
+		return fmt.Errorf("certificate could not be parsed")
+	}
+	if now.Before(cert.Parsed.NotBefore) {
+		return fmt.Errorf("certificate is not valid until %s", cert.Parsed.NotBefore.Format(time.RFC3339))
+	}
+	if now.After(cert.Parsed.NotAfter) {
+		return fmt.Errorf("certificate expired at %s", cert.Parsed.NotAfter.Format(time.RFC3339))
+	}
+
+	hash := hex.EncodeToString(cert.CertHash)
+	if visiting[hash] {
+		return fmt.Errorf("issuer path contains a cycle")
+	}
+
+	lookupKey := cert.AKI
+	if len(lookupKey) == 0 {
+		if isSignatureSelfSigned(cert) {
+			lookupKey = cert.SKI
+		}
+		if len(lookupKey) == 0 {
+			return fmt.Errorf("certificate does not have an Authority Key Identifier (AKI) extension")
+		}
+	}
+
+	visiting[hash] = true
+	defer delete(visiting, hash)
+
+	for _, candidate := range uploadedBySKI[string(lookupKey)] {
+		if candidate == nil || candidate.Parsed == nil {
+			continue
+		}
+		if string(candidate.CertHash) == string(cert.CertHash) {
+			continue
+		}
+		if err := cert.Parsed.CheckSignatureFrom(candidate.Parsed); err != nil {
+			continue
+		}
+		if err := s.validateManualCertificate(ctx, candidate, uploadedBySKI, now, visiting); err == nil {
+			return nil
+		}
+	}
+
+	dbCandidates, err := s.repo.FindCertificatesBySKI(ctx, lookupKey)
+	if err != nil {
+		return fmt.Errorf("look up issuer certificates: %w", err)
+	}
+
+	for _, candidate := range dbCandidates {
+		if candidate == nil || candidate.Parsed == nil {
+			continue
+		}
+		if err := cert.Parsed.CheckSignatureFrom(candidate.Parsed); err != nil {
+			continue
+		}
+		if string(candidate.CertHash) == string(cert.CertHash) && isSignatureSelfSigned(candidate) {
+			return nil
+		}
+		if err := s.validateManualCertificate(ctx, candidate, uploadedBySKI, now, visiting); err == nil {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no valid issuer path to a trusted root was found")
+}
+
 func isHTMXRequest(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }

@@ -808,7 +808,8 @@ func TestHandleManualCert_CrossSignedSelfSigned(t *testing.T) {
 	trustedRoot, trustedKey := generateTestCA(t)
 	selfSignedNewCA, crossSignedNewCA := generateCrossSignedCA(t, trustedRoot, trustedKey)
 
-	// The DB contains the cross-signed version of the new CA (same SKI as the self-signed version).
+	// The DB contains the cross-signed version of the new CA (same SKI as the self-signed version)
+	// and the trusted root that issued the cross-sign.
 	crossInfo := certutil.ParseX509Certificate(crossSignedNewCA)
 	crossCand := &CertificateResult{
 		CertHash:  crossInfo.CertHash,
@@ -823,7 +824,7 @@ func TestHandleManualCert_CrossSignedSelfSigned(t *testing.T) {
 		Parsed:    crossInfo.Parsed,
 	}
 
-	repo := &mockRepository{skiCertificates: []*CertificateResult{crossCand}}
+	repo := &mockRepository{skiCertificates: []*CertificateResult{crossCand, makeCertResult(trustedRoot)}}
 	crawler := &mockCrawler{}
 	server, err := New(DefaultConfig(), repo, crawler)
 	if err != nil {
@@ -1564,13 +1565,13 @@ func TestHandleManualCert_ValidChain_ThreeCerts(t *testing.T) {
 	}
 }
 
-// TestHandleManualCert_InvalidChain_WrongOrder verifies that uploading certs in
-// the wrong order (CA first, leaf second) is rejected.
-func TestHandleManualCert_InvalidChain_WrongOrder(t *testing.T) {
+// TestHandleManualCert_WrongOrderAccepted verifies that upload order is not
+// treated as authoritative. Each certificate is validated independently.
+func TestHandleManualCert_WrongOrderAccepted(t *testing.T) {
 	rootCert, rootKey := generateTestCA(t)
 	leafCert := generateTestLeaf(t, rootCert, rootKey)
 
-	// Submit in reversed order: CA first, leaf second — not a valid chain.
+	// Submit in reversed order: CA first, leaf second.
 	reversed := pemEncodeTest(rootCert.Raw) + pemEncodeTest(leafCert.Raw)
 
 	repo := &mockRepository{skiCertificates: []*CertificateResult{makeCertResult(rootCert)}}
@@ -1590,11 +1591,11 @@ func TestHandleManualCert_InvalidChain_WrongOrder(t *testing.T) {
 	w := httptest.NewRecorder()
 	server.handleManualCert(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for wrong chain order, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid certs in wrong order, got %d: %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "Invalid Chain") {
-		t.Errorf("expected 'Invalid Chain' error, got: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "manual import") {
+		t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
 	}
 }
 
@@ -1642,16 +1643,15 @@ func TestHandleManualCert_TooManyCerts(t *testing.T) {
 	}
 }
 
-// TestHandleManualCert_UnrelatedCerts verifies that two unrelated (non-chaining)
-// certificates are rejected with an "Invalid Chain" error.
-func TestHandleManualCert_UnrelatedCerts(t *testing.T) {
-	// Generate two independent root CAs — they have nothing to do with each other.
+// TestHandleManualCert_UnrelatedTrustedCertsAccepted verifies that unrelated
+// uploaded certificates are accepted when each one is independently trusted.
+func TestHandleManualCert_UnrelatedTrustedCertsAccepted(t *testing.T) {
 	root1, _ := generateTestCA(t)
 	root2, _ := generateTestCA(t)
 
 	twoCerts := pemEncodeTest(root1.Raw) + pemEncodeTest(root2.Raw)
 
-	repo := &mockRepository{}
+	repo := &mockRepository{skiCertificates: []*CertificateResult{makeCertResult(root1), makeCertResult(root2)}}
 	crawler := &mockCrawler{}
 	server, err := New(DefaultConfig(), repo, crawler)
 	if err != nil {
@@ -1668,10 +1668,10 @@ func TestHandleManualCert_UnrelatedCerts(t *testing.T) {
 	w := httptest.NewRecorder()
 	server.handleManualCert(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for unrelated certs, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for unrelated trusted certs, got %d: %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "Invalid Chain") {
-		t.Errorf("expected 'Invalid Chain' error for unrelated certs, got: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "manual import") {
+		t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
 	}
 }
