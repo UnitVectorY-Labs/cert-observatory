@@ -34,8 +34,15 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// maxManualCerts is the maximum number of certificates that can be uploaded at once
+// via the manual import feature.
+const maxManualCerts = 5
+
 // handleManualCert handles manual PEM certificate upload (POST only).
 // This is a "secret" feature unlocked by visiting /?manual.
+// Accepts 1 to maxManualCerts PEM CERTIFICATE blocks. Each certificate must be
+// currently valid and independently trace to a trusted certificate already in
+// the database, optionally using other uploaded certificates as intermediates.
 func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.renderManualError(w, r, "Invalid Request", "Could not parse form data.", http.StatusBadRequest)
@@ -44,107 +51,90 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 
 	pemText := strings.TrimSpace(r.FormValue("pem"))
 	if pemText == "" {
-		s.renderManualError(w, r, "No Certificate", "Please paste a PEM-encoded certificate.", http.StatusBadRequest)
+		s.renderManualError(w, r, "No Certificate", "Please paste at least one PEM-encoded certificate.", http.StatusBadRequest)
 		return
 	}
 
-	// Decode the PEM block
-	block, rest := pem.Decode([]byte(pemText))
-	if block == nil {
-		s.renderManualError(w, r, "Invalid PEM", "Could not decode PEM data. Please provide a valid PEM-encoded certificate.", http.StatusBadRequest)
-		return
-	}
-	if block.Type != "CERTIFICATE" {
-		s.renderManualError(w, r, "Invalid PEM", fmt.Sprintf("Expected a CERTIFICATE block, got %q.", block.Type), http.StatusBadRequest)
-		return
-	}
-	// Only one certificate is allowed — reject any additional PEM blocks of any type or non-whitespace junk
-	if extraBlock, _ := pem.Decode(rest); extraBlock != nil {
-		s.renderManualError(w, r, "Multiple PEM Blocks", "Only a single PEM certificate block is allowed. Please provide exactly one certificate.", http.StatusBadRequest)
-		return
-	}
-	if len(strings.TrimSpace(string(rest))) > 0 {
-		s.renderManualError(w, r, "Unexpected Data", "Only a single PEM certificate is allowed. Please remove any trailing data after the certificate.", http.StatusBadRequest)
-		return
-	}
-
-	// Parse the DER bytes
-	x509Cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		s.renderManualError(w, r, "Invalid Certificate", "Could not parse the certificate: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	certInfo := certutil.ParseX509Certificate(x509Cert)
-
-	// Build a CertificateResult from the parsed certificate
-	uploaded := &CertificateResult{
-		CertHash:  certInfo.CertHash,
-		DER:       certInfo.DER,
-		PEM:       certInfo.PEM(),
-		Subject:   certInfo.Subject,
-		Issuer:    certInfo.Issuer,
-		NotBefore: certInfo.NotBefore,
-		NotAfter:  certInfo.NotAfter,
-		SKI:       certInfo.SKI,
-		AKI:       certInfo.AKI,
-		Parsed:    certInfo.Parsed,
-		Position:  1,
-	}
-
-	// Look up valid issuers from the DB using AKI→SKI matching + signature verification.
-	// Self-signed certificates are accepted when a cross-signed version of the same key
-	// already exists in the DB—the cross-signed cert shares the same SKI (public key), so
-	// its presence means the key has already been vouched for by a trusted root.
-	//
-	// Lookup key selection:
-	//   - Use AKI when present (standard: AKI points to the issuer's SKI).
-	//   - For self-signed certs without AKI, fall back to the cert's own SKI to locate a
-	//     cross-signed equivalent (same public key, different trusted issuer) in the DB.
-	lookupKey := uploaded.AKI
-	if len(lookupKey) == 0 {
-		if isSignatureSelfSigned(uploaded) {
-			lookupKey = uploaded.SKI
+	// Decode all PEM blocks, accepting only CERTIFICATE blocks.
+	var x509Certs []*x509.Certificate
+	remaining := []byte(pemText)
+	for {
+		var block *pem.Block
+		block, remaining = pem.Decode(remaining)
+		if block == nil {
+			break
 		}
-		if len(lookupKey) == 0 {
-			s.renderManualError(w, r, "Untrusted Certificate", "The certificate does not have an Authority Key Identifier (AKI) extension. Cannot verify its issuer.", http.StatusBadRequest)
+		if block.Type != "CERTIFICATE" {
+			s.renderManualError(w, r, "Invalid PEM", fmt.Sprintf("Only CERTIFICATE PEM blocks are accepted, got %q.", block.Type), http.StatusBadRequest)
+			return
+		}
+		if len(x509Certs) >= maxManualCerts {
+			s.renderManualError(w, r, "Too Many Certificates", fmt.Sprintf("A maximum of %d certificates can be uploaded at once.", maxManualCerts), http.StatusBadRequest)
+			return
+		}
+		parsed, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			s.renderManualError(w, r, "Invalid Certificate", "Could not parse certificate: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		x509Certs = append(x509Certs, parsed)
+	}
+
+	// Reject non-whitespace trailing data that could not be decoded as PEM.
+	// This check only applies when at least one certificate was already parsed;
+	// if no certs were found at all the "Invalid PEM" check below provides a
+	// better error message.
+	if len(x509Certs) > 0 && len(strings.TrimSpace(string(remaining))) > 0 {
+		s.renderManualError(w, r, "Unexpected Data", "Only PEM CERTIFICATE blocks are allowed. Please remove any non-PEM trailing data.", http.StatusBadRequest)
+		return
+	}
+
+	if len(x509Certs) == 0 {
+		s.renderManualError(w, r, "Invalid PEM", "Could not decode any PEM data. Please provide valid PEM-encoded certificates.", http.StatusBadRequest)
+		return
+	}
+
+	// Build CertificateResult objects and store every certificate in the database.
+	uploaded := make([]*CertificateResult, len(x509Certs))
+	uploadedBySKI := make(map[string][]*CertificateResult)
+	for i, x509Cert := range x509Certs {
+		certInfo := certutil.ParseX509Certificate(x509Cert)
+		uploaded[i] = &CertificateResult{
+			CertHash:  certInfo.CertHash,
+			DER:       certInfo.DER,
+			PEM:       certInfo.PEM(),
+			Subject:   certInfo.Subject,
+			Issuer:    certInfo.Issuer,
+			NotBefore: certInfo.NotBefore,
+			NotAfter:  certInfo.NotAfter,
+			SKI:       certInfo.SKI,
+			AKI:       certInfo.AKI,
+			Parsed:    certInfo.Parsed,
+			Position:  i + 1,
+		}
+		if len(uploaded[i].SKI) > 0 {
+			uploadedBySKI[string(uploaded[i].SKI)] = append(uploadedBySKI[string(uploaded[i].SKI)], uploaded[i])
+		}
+	}
+
+	now := time.Now()
+	for i, cert := range uploaded {
+		if err := s.validateManualCertificate(r.Context(), cert, uploadedBySKI, now, map[string]bool{}); err != nil {
+			s.renderManualError(w, r, "Untrusted Certificate",
+				fmt.Sprintf("Certificate %d (%s) is not acceptable for manual import: %v", i+1, certSubjectDN(cert), err),
+				http.StatusBadRequest)
 			return
 		}
 	}
 
-	candidates, err := s.repo.FindCertificatesBySKI(r.Context(), lookupKey)
-	if err != nil {
-		s.logger.Error("failed to look up issuer candidates", "error", err)
-		s.renderManualError(w, r, "Database Error", "Could not look up issuer certificates.", http.StatusInternalServerError)
-		return
-	}
-
-	trusted := false
-	for _, candidate := range candidates {
-		if candidate.Parsed == nil {
-			continue
-		}
-		// CheckSignatureFrom validates the signature AND enforces that the candidate
-		// is a CA certificate (IsCA=true with KeyUsageCertSign where relevant).
-		if err := x509Cert.CheckSignatureFrom(candidate.Parsed); err == nil {
-			trusted = true
-			break
+	for _, cert := range uploaded {
+		if err := s.repo.StoreCertificate(r.Context(), cert); err != nil {
+			s.logger.Error("failed to store manual certificate", "error", err)
+			s.renderManualError(w, r, "Storage Error", "Could not store the certificate.", http.StatusInternalServerError)
+			return
 		}
 	}
 
-	if !trusted {
-		s.renderManualError(w, r, "Untrusted Certificate", "The certificate is not signed by any trusted certificate in the database. Only certificates with a valid chain of trust can be uploaded.", http.StatusBadRequest)
-		return
-	}
-
-	// Store the certificate in the database
-	if err := s.repo.StoreCertificate(r.Context(), uploaded); err != nil {
-		s.logger.Error("failed to store manual certificate", "error", err)
-		s.renderManualError(w, r, "Storage Error", "Could not store the certificate.", http.StatusInternalServerError)
-		return
-	}
-
-	// Build and render the chain graph starting from the uploaded certificate
 	// ShowNonChainCerts is always true for manual mode — expanding the trust path
 	// via the DB is the primary purpose of this feature.
 	// ShowExpired is driven by the user's checkbox selection.
@@ -153,31 +143,107 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 		ShowExpired:       r.FormValue("showExpired") == "true",
 	}
 
-	subjectCN := extractCN(certInfo.Subject)
+	// Use the leaf (first) certificate's CN as the display name.
+	leafInfo := certutil.ParseX509Certificate(x509Certs[0])
+	subjectCN := extractCN(leafInfo.Subject)
 	if subjectCN == "" {
-		subjectCN = certInfo.Subject
+		subjectCN = leafInfo.Subject
 	}
 
 	data := &ResultsViewData{
 		Domain:   subjectCN,
 		IsManual: true,
 	}
-	viewData := certToViewData(uploaded)
-	// Assign an appropriate label based on the actual certificate type rather than
-	// defaulting to "Server Certificate" (which is misleading for CA/intermediate certs).
-	if viewData.IsSelfSigned {
-		viewData.CertLabel = "Self Signed Certificate"
-	} else if viewData.IsCA {
-		viewData.CertLabel = "Intermediate CA"
-	} else {
-		viewData.CertLabel = "End-Entity Certificate"
+
+	for _, cert := range uploaded {
+		viewData := certToViewData(cert)
+		// Assign an appropriate label based on the actual certificate type rather than
+		// defaulting to "Server Certificate" (which is misleading for CA/intermediate certs).
+		if viewData.IsSelfSigned {
+			viewData.CertLabel = "Self Signed Certificate"
+		} else if viewData.IsCA {
+			viewData.CertLabel = "Intermediate CA"
+		} else {
+			viewData.CertLabel = "End-Entity Certificate"
+		}
+		data.Chain = append(data.Chain, viewData)
 	}
-	data.Chain = []*CertViewData{viewData}
-	data.ChainGraph = buildChainGraph(r.Context(), s.repo, []*CertificateResult{uploaded}, filters)
-	data.DownloadURL = buildManualDownloadURL(hex.EncodeToString(uploaded.CertHash), filters)
+
+	// Pass all uploaded certs so they are all marked "in chain" in the Mermaid diagram,
+	// matching the grouping used when a server returns multiple certificates.
+	data.ChainGraph = buildChainGraph(r.Context(), s.repo, uploaded, filters)
+	data.DownloadURL = buildManualDownloadURL(hex.EncodeToString(uploaded[0].CertHash), filters)
 
 	s.renderManualResults(w, r, data)
 }
+
+func (s *Server) validateManualCertificate(ctx context.Context, cert *CertificateResult, uploadedBySKI map[string][]*CertificateResult, now time.Time, visiting map[string]bool) error {
+	if cert == nil || cert.Parsed == nil {
+		return fmt.Errorf("certificate could not be parsed")
+	}
+	if now.Before(cert.Parsed.NotBefore) {
+		return fmt.Errorf("certificate is not valid until %s", cert.Parsed.NotBefore.Format(time.RFC3339))
+	}
+	if now.After(cert.Parsed.NotAfter) {
+		return fmt.Errorf("certificate expired at %s", cert.Parsed.NotAfter.Format(time.RFC3339))
+	}
+
+	hash := hex.EncodeToString(cert.CertHash)
+	if visiting[hash] {
+		return fmt.Errorf("issuer path contains a cycle")
+	}
+
+	lookupKey := cert.AKI
+	if len(lookupKey) == 0 {
+		if isSignatureSelfSigned(cert) {
+			lookupKey = cert.SKI
+		}
+		if len(lookupKey) == 0 {
+			return fmt.Errorf("certificate does not have an Authority Key Identifier (AKI) extension")
+		}
+	}
+
+	visiting[hash] = true
+	defer delete(visiting, hash)
+
+	for _, candidate := range uploadedBySKI[string(lookupKey)] {
+		if candidate == nil || candidate.Parsed == nil {
+			continue
+		}
+		if string(candidate.CertHash) == string(cert.CertHash) {
+			continue
+		}
+		if err := cert.Parsed.CheckSignatureFrom(candidate.Parsed); err != nil {
+			continue
+		}
+		if err := s.validateManualCertificate(ctx, candidate, uploadedBySKI, now, visiting); err == nil {
+			return nil
+		}
+	}
+
+	dbCandidates, err := s.repo.FindCertificatesBySKI(ctx, lookupKey)
+	if err != nil {
+		return fmt.Errorf("look up issuer certificates: %w", err)
+	}
+
+	for _, candidate := range dbCandidates {
+		if candidate == nil || candidate.Parsed == nil {
+			continue
+		}
+		if err := cert.Parsed.CheckSignatureFrom(candidate.Parsed); err != nil {
+			continue
+		}
+		if string(candidate.CertHash) == string(cert.CertHash) && isSignatureSelfSigned(candidate) {
+			return nil
+		}
+		if err := s.validateManualCertificate(ctx, candidate, uploadedBySKI, now, visiting); err == nil {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no valid issuer path to a trusted root was found")
+}
+
 func isHTMXRequest(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }
