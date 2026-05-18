@@ -985,7 +985,9 @@ func TestHandleManualCert_MultiplePEMBlocks(t *testing.T) {
 	caCert, caKey := generateTestCA(t)
 	leafCert := generateTestLeaf(t, caCert, caKey)
 
-	// Submit two certificates in the PEM field
+	// Submit leaf + CA in chain order. With the new multi-cert support the chain is
+	// valid, but the self-signed CA has no trusted equivalent in the empty DB mock,
+	// so the trust check should fail with "Untrusted Certificate".
 	twoCerts := pemEncodeTest(leafCert.Raw) + pemEncodeTest(caCert.Raw)
 
 	repo := &mockRepository{}
@@ -1008,8 +1010,8 @@ func TestHandleManualCert_MultiplePEMBlocks(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "Multiple PEM Blocks") {
-		t.Errorf("expected 'Multiple PEM Blocks' error, got: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "Untrusted") {
+		t.Errorf("expected 'Untrusted' error for untrusted chain, got: %s", w.Body.String())
 	}
 }
 
@@ -1017,7 +1019,9 @@ func TestHandleManualCert_TrailingPEMBlock(t *testing.T) {
 	caCert, caKey := generateTestCA(t)
 	leafCert := generateTestLeaf(t, caCert, caKey)
 
-	// Submit a certificate followed by another PEM block (EC PRIVATE KEY)
+	// Submit a certificate followed by a non-CERTIFICATE PEM block (EC PRIVATE KEY).
+	// The handler now parses all blocks in a loop and rejects any block that is not
+	// a CERTIFICATE, so this should result in "Invalid PEM".
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -1049,10 +1053,14 @@ func TestHandleManualCert_TrailingPEMBlock(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
 	}
-	// EC PRIVATE KEY is a decodable PEM block, so this hits the "Multiple PEM Blocks" path
-	if !strings.Contains(w.Body.String(), "Multiple PEM Blocks") {
-		t.Errorf("expected 'Multiple PEM Blocks' error, got: %s", w.Body.String())
+	// EC PRIVATE KEY block is decoded by pem.Decode but rejected because its type is
+	// not "CERTIFICATE", so the handler returns "Invalid PEM".
+	if !strings.Contains(w.Body.String(), "Invalid PEM") {
+		t.Errorf("expected 'Invalid PEM' error for non-certificate PEM block, got: %s", w.Body.String())
 	}
+
+	_ = caCert
+	_ = caKey
 }
 
 func TestHandleManualCert_TrailingNonPEMJunk(t *testing.T) {
@@ -1435,5 +1443,235 @@ func TestBuildManualDownloadURL(t *testing.T) {
 	}
 	if !strings.Contains(u, "showExpired=true") {
 		t.Errorf("expected showExpired param in URL, got %s", u)
+	}
+}
+
+// generateTestIntermediate creates an intermediate CA certificate signed by the given parent.
+func generateTestIntermediate(t *testing.T, parent *x509.Certificate, parentKey *ecdsa.PrivateKey) (*x509.Certificate, *ecdsa.PrivateKey) {
+	t.Helper()
+	intKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate intermediate key: %v", err)
+	}
+	ski := make([]byte, 20)
+	if _, err := rand.Read(ski); err != nil {
+		t.Fatalf("generate intermediate SKI: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(100),
+		Subject:               pkix.Name{CommonName: "Test Intermediate CA"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(5 * 365 * 24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		SubjectKeyId:          ski,
+		AuthorityKeyId:        parent.SubjectKeyId,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, &intKey.PublicKey, parentKey)
+	if err != nil {
+		t.Fatalf("create intermediate cert: %v", err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parse intermediate cert: %v", err)
+	}
+	return cert, intKey
+}
+
+// makeCertResult converts an x509.Certificate to a CertificateResult suitable for the mock repo.
+func makeCertResult(cert *x509.Certificate) *CertificateResult {
+	info := certutil.ParseX509Certificate(cert)
+	return &CertificateResult{
+		CertHash:  info.CertHash,
+		DER:       info.DER,
+		PEM:       info.PEM(),
+		Subject:   info.Subject,
+		Issuer:    info.Issuer,
+		NotBefore: info.NotBefore,
+		NotAfter:  info.NotAfter,
+		SKI:       info.SKI,
+		AKI:       info.AKI,
+		Parsed:    info.Parsed,
+	}
+}
+
+// TestHandleManualCert_ValidChain_TwoCerts verifies that uploading leaf + CA in
+// chain order succeeds when the CA is trusted in the database.
+func TestHandleManualCert_ValidChain_TwoCerts(t *testing.T) {
+	rootCert, rootKey := generateTestCA(t)
+	leafCert := generateTestLeaf(t, rootCert, rootKey)
+
+	// The self-signed root is trusted: it is in the DB under its own SKI.
+	repo := &mockRepository{skiCertificates: []*CertificateResult{makeCertResult(rootCert)}}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	twoCerts := pemEncodeTest(leafCert.Raw) + pemEncodeTest(rootCert.Raw)
+	form := url.Values{}
+	form.Set("pem", twoCerts)
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid two-cert chain, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "manual import") {
+		t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
+	}
+}
+
+// TestHandleManualCert_ValidChain_ThreeCerts verifies that uploading leaf +
+// intermediate + root succeeds when the root is trusted in the DB.
+func TestHandleManualCert_ValidChain_ThreeCerts(t *testing.T) {
+	rootCert, rootKey := generateTestCA(t)
+	intCert, intKey := generateTestIntermediate(t, rootCert, rootKey)
+	leafCert := generateTestLeaf(t, intCert, intKey)
+
+	// The root is trusted in the DB (looked up by the intermediate's AKI = root's SKI).
+	repo := &mockRepository{skiCertificates: []*CertificateResult{makeCertResult(rootCert)}}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	// leaf → intermediate (leaf signed by intermediate, intermediate signed by root)
+	threeCerts := pemEncodeTest(leafCert.Raw) + pemEncodeTest(intCert.Raw)
+	form := url.Values{}
+	form.Set("pem", threeCerts)
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid leaf+intermediate chain, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "manual import") {
+		t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
+	}
+}
+
+// TestHandleManualCert_InvalidChain_WrongOrder verifies that uploading certs in
+// the wrong order (CA first, leaf second) is rejected.
+func TestHandleManualCert_InvalidChain_WrongOrder(t *testing.T) {
+	rootCert, rootKey := generateTestCA(t)
+	leafCert := generateTestLeaf(t, rootCert, rootKey)
+
+	// Submit in reversed order: CA first, leaf second — not a valid chain.
+	reversed := pemEncodeTest(rootCert.Raw) + pemEncodeTest(leafCert.Raw)
+
+	repo := &mockRepository{skiCertificates: []*CertificateResult{makeCertResult(rootCert)}}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("pem", reversed)
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for wrong chain order, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Invalid Chain") {
+		t.Errorf("expected 'Invalid Chain' error, got: %s", w.Body.String())
+	}
+}
+
+// TestHandleManualCert_TooManyCerts verifies that submitting more than 5 certificates
+// is rejected.
+func TestHandleManualCert_TooManyCerts(t *testing.T) {
+	rootCert, rootKey := generateTestCA(t)
+
+	// Build a chain of 6 certificates: root → int1 → int2 → int3 → int4 → leaf
+	int1Cert, int1Key := generateTestIntermediate(t, rootCert, rootKey)
+	int2Cert, int2Key := generateTestIntermediate(t, int1Cert, int1Key)
+	int3Cert, int3Key := generateTestIntermediate(t, int2Cert, int2Key)
+	int4Cert, int4Key := generateTestIntermediate(t, int3Cert, int3Key)
+	leafCert := generateTestLeaf(t, int4Cert, int4Key)
+
+	sixCerts := pemEncodeTest(leafCert.Raw) +
+		pemEncodeTest(int4Cert.Raw) +
+		pemEncodeTest(int3Cert.Raw) +
+		pemEncodeTest(int2Cert.Raw) +
+		pemEncodeTest(int1Cert.Raw) +
+		pemEncodeTest(rootCert.Raw)
+
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("pem", sixCerts)
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for too many certs, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Too Many Certificates") {
+		t.Errorf("expected 'Too Many Certificates' error, got: %s", w.Body.String())
+	}
+}
+
+// TestHandleManualCert_UnrelatedCerts verifies that two unrelated (non-chaining)
+// certificates are rejected with an "Invalid Chain" error.
+func TestHandleManualCert_UnrelatedCerts(t *testing.T) {
+	// Generate two independent root CAs — they have nothing to do with each other.
+	root1, _ := generateTestCA(t)
+	root2, _ := generateTestCA(t)
+
+	twoCerts := pemEncodeTest(root1.Raw) + pemEncodeTest(root2.Raw)
+
+	repo := &mockRepository{}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("pem", twoCerts)
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for unrelated certs, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "Invalid Chain") {
+		t.Errorf("expected 'Invalid Chain' error for unrelated certs, got: %s", w.Body.String())
 	}
 }
