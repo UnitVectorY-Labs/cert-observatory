@@ -21,15 +21,16 @@ import (
 
 // mockRepository implements the Repository interface for testing.
 type mockRepository struct {
-	domainResult      *DomainResult
-	certificateResult *CertificateResult
-	skiCertificates   []*CertificateResult
-	canStandard       bool
-	standardWait      time.Duration
-	canForced         bool
-	forcedWait        time.Duration
-	lockAcquired      bool
-	crawlResults      []*CrawlResultInput
+	domainResult       *DomainResult
+	certificateResult  *CertificateResult
+	storedCertificates map[string]*CertificateResult
+	skiCertificates    []*CertificateResult
+	canStandard        bool
+	standardWait       time.Duration
+	canForced          bool
+	forcedWait         time.Duration
+	lockAcquired       bool
+	crawlResults       []*CrawlResultInput
 }
 
 func (m *mockRepository) GetDomainWithChain(ctx context.Context, domain string) (*DomainResult, error) {
@@ -44,10 +45,23 @@ func (m *mockRepository) GetDomainWithChainForPort(ctx context.Context, domain s
 }
 
 func (m *mockRepository) GetCertificateByHash(ctx context.Context, hash []byte) (*CertificateResult, error) {
+	if m.storedCertificates != nil {
+		if cert := m.storedCertificates[string(hash)]; cert != nil {
+			return cert, nil
+		}
+	}
 	if m.certificateResult != nil {
 		return m.certificateResult, nil
 	}
 	return nil, context.DeadlineExceeded
+}
+
+func (m *mockRepository) CertificateExists(ctx context.Context, hash []byte) (bool, error) {
+	if m.storedCertificates != nil {
+		_, ok := m.storedCertificates[string(hash)]
+		return ok, nil
+	}
+	return false, nil
 }
 
 func (m *mockRepository) FindCertificatesBySKI(ctx context.Context, ski []byte) ([]*CertificateResult, error) {
@@ -738,6 +752,39 @@ func TestHandleManualCert_SelfSigned(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "Untrusted") {
 		t.Errorf("expected untrusted error for self-signed cert with no DB match, got: %s", w.Body.String())
+	}
+}
+
+func TestHandleManualCert_AlreadyStoredSelfSignedSucceeds(t *testing.T) {
+	caCert, _ := generateTestCA(t)
+	caResult := makeCertResult(caCert)
+
+	repo := &mockRepository{
+		storedCertificates: map[string]*CertificateResult{
+			string(caResult.CertHash): caResult,
+		},
+	}
+	crawler := &mockCrawler{}
+	server, err := New(DefaultConfig(), repo, crawler)
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("pem", pemEncodeTest(caCert.Raw))
+	req := httptest.NewRequest(http.MethodPost, "/manual", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Host = "localhost:8080"
+
+	w := httptest.NewRecorder()
+	server.handleManualCert(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for already stored self-signed cert, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "manual import") {
+		t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
 	}
 }
 

@@ -337,6 +337,21 @@ func parseCertificateDER(der []byte) *x509.Certificate {
 	return info.Parsed
 }
 
+// CertificateExists checks whether a certificate is already present in the catalog.
+func (r *WebRepository) CertificateExists(ctx context.Context, hash []byte) (bool, error) {
+	var exists bool
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM certificates
+			WHERE cert_hash = $1
+		)
+	`, hash).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check certificate exists: %w", err)
+	}
+	return exists, nil
+}
+
 // FindCertificatesBySKI finds certificates whose SKI matches the given value.
 func (r *WebRepository) FindCertificatesBySKI(ctx context.Context, ski []byte) ([]*web.CertificateResult, error) {
 	if len(ski) == 0 {

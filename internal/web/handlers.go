@@ -181,6 +181,15 @@ func (s *Server) validateManualCertificate(ctx context.Context, cert *Certificat
 	if cert == nil || cert.Parsed == nil {
 		return fmt.Errorf("certificate could not be parsed")
 	}
+
+	exists, err := s.repo.CertificateExists(ctx, cert.CertHash)
+	if err != nil {
+		return fmt.Errorf("check existing certificate: %w", err)
+	}
+	if exists {
+		return nil
+	}
+
 	if now.Before(cert.Parsed.NotBefore) {
 		return fmt.Errorf("certificate is not valid until %s", cert.Parsed.NotBefore.Format(time.RFC3339))
 	}
