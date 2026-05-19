@@ -373,19 +373,19 @@ a {
 }
 
 .cert-tab-list {
-  @apply mb-3 inline-flex rounded-lg border border-slate-200 bg-slate-100 p-1 shadow-sm;
-  @apply dark:border-slate-700 dark:bg-slate-950;
+  @apply mb-4 flex border-b border-slate-200;
+  @apply dark:border-slate-700;
 }
 
 .cert-tab-button {
-  @apply rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors;
-  @apply hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-orange-500/40;
-  @apply dark:text-slate-300 dark:hover:text-slate-50;
+  @apply -mb-px border-b-2 border-transparent px-4 py-2 text-sm font-semibold text-slate-500 transition-colors;
+  @apply hover:border-slate-300 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/40;
+  @apply dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-100;
 }
 
 .cert-tab-button.is-active {
-  @apply bg-white text-orange-700 shadow-sm;
-  @apply dark:bg-slate-800 dark:text-orange-300;
+  @apply border-orange-500 text-orange-700;
+  @apply dark:border-orange-400 dark:text-orange-300;
 }
 
 .cert-tab-panel {
@@ -393,7 +393,16 @@ a {
 }
 
 .details-stack {
+  @apply min-w-0 space-y-5;
+}
+
+.cert-detail-section {
   @apply min-w-0 space-y-3;
+}
+
+.detail-section-title {
+  @apply border-b border-orange-500/35 pb-1 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-orange-600;
+  @apply dark:text-orange-400;
 }
 
 .advanced-decode {
