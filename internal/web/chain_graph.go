@@ -25,6 +25,8 @@ type ChainGraphNode struct {
 	InChain bool
 	// IsSelfSigned indicates the certificate's own public key validates its signature.
 	IsSelfSigned bool
+	// IsCA indicates the certificate has CA basic constraints enabled.
+	IsCA bool
 	// IsMissing indicates the issuer was identified but no matching certificate was found.
 	IsMissing bool
 	// IsExpired indicates the certificate is expired as of graph build time.
@@ -99,8 +101,8 @@ func buildChainGraph(ctx context.Context, repo Repository, chainCerts []*Certifi
 		builder.chainSet[hashHex] = true
 	}
 
-	// Build the tree starting from the leaf
-	root := builder.buildNode(chainCerts[0], make(map[string]bool), 0)
+	// Build the tree starting from the end-entity certificate when present.
+	root := builder.buildNode(selectGraphStartCert(chainCerts), make(map[string]bool), 0)
 
 	if root == nil {
 		return nil
@@ -121,7 +123,6 @@ func buildChainGraph(ctx context.Context, repo Repository, chainCerts []*Certifi
 type mermaidGraphBuilder struct {
 	nextNodeID      int
 	nextMissingID   int
-	leafHash        string
 	nodeIDByHash    map[string]string
 	nodeToCertIndex map[string]int
 	inChainNodeSet  map[string]bool
@@ -138,7 +139,6 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 	}
 
 	b := &mermaidGraphBuilder{
-		leafHash:        root.HashHex,
 		nodeIDByHash:    make(map[string]string),
 		nodeToCertIndex: make(map[string]int),
 		inChainNodeSet:  make(map[string]bool),
@@ -206,12 +206,12 @@ func (b *mermaidGraphBuilder) classifyNode(node *ChainGraphNode) string {
 	switch {
 	case node.IsMissing:
 		return "missing"
-	case node.HashHex == b.leafHash:
-		return "leaf"
 	case node.IsSelfSigned:
 		return "root"
-	default:
+	case node.IsCA:
 		return "intermediate"
+	default:
+		return "leaf"
 	}
 }
 
@@ -322,6 +322,7 @@ func (b *chainGraphBuilder) buildNode(cert *CertificateResult, visited map[strin
 		IssuerDN:     certIssuerDN(cert),
 		InChain:      b.chainSet[hashHex],
 		IsSelfSigned: selfSigned,
+		IsCA:         isCA(cert),
 		IsExpired:    isExpiredAt(cert, time.Now()),
 		CertIndex:    certIdx,
 	}
@@ -440,6 +441,23 @@ func isSignatureSelfSigned(cert *CertificateResult) bool {
 	return err == nil
 }
 
+func selectGraphStartCert(certs []*CertificateResult) *CertificateResult {
+	if len(certs) == 0 {
+		return nil
+	}
+	for _, cert := range certs {
+		if cert != nil && !isCA(cert) {
+			return cert
+		}
+	}
+	for _, cert := range certs {
+		if cert != nil && !isSignatureSelfSigned(cert) {
+			return cert
+		}
+	}
+	return certs[0]
+}
+
 // certSubjectDN extracts the subject DN from a CertificateResult.
 func certSubjectDN(cert *CertificateResult) string {
 	if cert.Parsed != nil {
@@ -467,4 +485,14 @@ func isExpiredAt(cert *CertificateResult, now time.Time) bool {
 		return false
 	}
 	return now.After(cert.NotAfter)
+}
+
+func isCA(cert *CertificateResult) bool {
+	if cert == nil {
+		return false
+	}
+	if cert.Parsed != nil {
+		return cert.Parsed.IsCA
+	}
+	return false
 }

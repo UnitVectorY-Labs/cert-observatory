@@ -327,6 +327,97 @@ func TestBuildChainGraph_MermaidStylingAndGrouping(t *testing.T) {
 	}
 }
 
+func TestBuildChainGraph_MermaidClassifiesUploadedIntermediateByCertificateRole(t *testing.T) {
+	root := generateSelfSignedRoot(t, "Manual Root CA")
+	inter := generateSignedIntermediate(t, "Manual Intermediate CA", root)
+
+	repo := newSKILookupRepo()
+	repo.registerCert(root)
+
+	graph := buildChainGraph(context.Background(), repo, []*CertificateResult{inter.result}, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
+	if graph == nil {
+		t.Fatal("expected non-nil graph")
+	}
+
+	diagram := graph.MermaidDiagram
+	if strings.Contains(diagram, "class n0 leaf;") {
+		t.Fatalf("uploaded intermediate was classified as server certificate:\n%s", diagram)
+	}
+	if !strings.Contains(diagram, "class n0 intermediate;") {
+		t.Fatalf("expected uploaded intermediate to use intermediate class:\n%s", diagram)
+	}
+	if !strings.Contains(diagram, "class n1 root;") {
+		t.Fatalf("expected discovered self-signed issuer to use root class:\n%s", diagram)
+	}
+	if graph.Legend.HasServerCertificate {
+		t.Error("did not expect server certificate legend item")
+	}
+	if !graph.Legend.HasIntermediateCA {
+		t.Error("expected intermediate CA legend item")
+	}
+	if !graph.Legend.HasRootCA {
+		t.Error("expected root CA legend item")
+	}
+}
+
+func TestBuildChainGraph_MermaidClassifiesUploadedRootByCertificateRole(t *testing.T) {
+	root := generateSelfSignedRoot(t, "Manual Root CA")
+
+	repo := newSKILookupRepo()
+
+	graph := buildChainGraph(context.Background(), repo, []*CertificateResult{root.result}, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
+	if graph == nil {
+		t.Fatal("expected non-nil graph")
+	}
+
+	diagram := graph.MermaidDiagram
+	if strings.Contains(diagram, "class n0 leaf;") {
+		t.Fatalf("uploaded root was classified as server certificate:\n%s", diagram)
+	}
+	if !strings.Contains(diagram, "class n0 root;") {
+		t.Fatalf("expected uploaded root to use root class:\n%s", diagram)
+	}
+	if graph.Legend.HasServerCertificate {
+		t.Error("did not expect server certificate legend item")
+	}
+	if graph.Legend.HasIntermediateCA {
+		t.Error("did not expect intermediate CA legend item")
+	}
+	if !graph.Legend.HasRootCA {
+		t.Error("expected root CA legend item")
+	}
+}
+
+func TestBuildChainGraph_MermaidUsesEndEntityWhenChainOrderIsWrong(t *testing.T) {
+	root := generateSelfSignedRoot(t, "Misordered Root CA")
+	inter := generateSignedIntermediate(t, "Misordered Intermediate CA", root)
+	leaf := generateLeafCert(t, "misordered.example.com", inter)
+
+	repo := newSKILookupRepo()
+	repo.registerCert(root)
+	repo.registerCert(inter)
+
+	chainCerts := []*CertificateResult{inter.result, leaf.result, root.result}
+	graph := buildChainGraph(context.Background(), repo, chainCerts, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: true})
+	if graph == nil {
+		t.Fatal("expected non-nil graph")
+	}
+	if graph.Root.SubjectCN != "misordered.example.com" {
+		t.Fatalf("expected graph to start from non-CA certificate, got %q", graph.Root.SubjectCN)
+	}
+
+	diagram := graph.MermaidDiagram
+	if !strings.Contains(diagram, "class n0 leaf;") {
+		t.Fatalf("expected end-entity certificate to use server class:\n%s", diagram)
+	}
+	if !strings.Contains(diagram, "class n1 intermediate;") {
+		t.Fatalf("expected issuer CA to use intermediate class:\n%s", diagram)
+	}
+	if !strings.Contains(diagram, "class n2 root;") {
+		t.Fatalf("expected self-signed issuer to use root class:\n%s", diagram)
+	}
+}
+
 func TestBuildChainGraph_OutOfChainRoot(t *testing.T) {
 	// Scenario: chain has only [leaf, intermediate], root is fetched from DB.
 	root := generateSelfSignedRoot(t, "Out-Of-Chain Root CA")
