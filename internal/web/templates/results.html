@@ -92,142 +92,22 @@
                     </div>
                     <div class="details-column" data-cert-tabs>
                         <div class="cert-tab-list" role="tablist" aria-label="Certificate decode view">
-                            <button type="button" class="cert-tab-button is-active" role="tab" aria-selected="true" data-cert-tab-button="basic" onclick="switchCertDecodeTab(this, 'basic')">Basic</button>
-                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="advanced" onclick="switchCertDecodeTab(this, 'advanced')">Advanced</button>
+                            <button type="button" class="cert-tab-button is-active" role="tab" aria-selected="true" data-cert-tab-button="overview" onclick="switchCertDecodeTab(this, 'overview')">Overview</button>
+                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="usage" onclick="switchCertDecodeTab(this, 'usage')">Usage</button>
+                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="extensions" onclick="switchCertDecodeTab(this, 'extensions')">Extensions</button>
+                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="raw" onclick="switchCertDecodeTab(this, 'raw')">Raw</button>
                         </div>
-                        <div class="cert-tab-panel" data-cert-tab-panel="basic">
-                        <div class="details-stack">
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Subject</div>
-                                <div class="detail-box">{{$gc.SubjectDN}}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Issuer</div>
-                                <div class="detail-box">{{$gc.IssuerDN}}</div>
-                            </div>
+                        <div class="cert-tab-panel" data-cert-tab-panel="overview">
+                            {{template "cert-overview-details" $gc}}
                         </div>
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Not Before</div>
-                                <div class="detail-value {{if $gc.IsNotYetValid}}detail-future{{else}}detail-valid{{end}}">{{$gc.NotBeforeFormatted}}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Not After</div>
-                                <div class="detail-value {{if $gc.IsExpired}}detail-expired{{else}}detail-valid{{end}}">{{$gc.NotAfterFormatted}}</div>
-                            </div>
+                        <div class="cert-tab-panel hidden" data-cert-tab-panel="usage">
+                            {{template "cert-usage-details" $gc}}
                         </div>
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Validity Period</div>
-                                <div class="detail-value detail-muted">{{$gc.ValidityPeriod}}</div>
-                            </div>
-                            <div class="detail-item">
-                                {{if $gc.IsExpired}}
-                                <div class="detail-label">Expired</div>
-                                <div class="detail-value detail-expired">{{$gc.ExpiresIn}} ago</div>
-                                {{else if $gc.IsNotYetValid}}
-                                <div class="detail-label">Starts In</div>
-                                <div class="detail-value detail-future">not yet valid</div>
-                                {{else}}
-                                <div class="detail-label">Expires In</div>
-                                <div class="detail-value detail-valid">{{$gc.ExpiresIn}}</div>
-                                {{end}}
-                            </div>
+                        <div class="cert-tab-panel hidden" data-cert-tab-panel="extensions">
+                            {{template "cert-extensions-details" $gc}}
                         </div>
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Serial Number</div>
-                                <div class="detail-box detail-box-mono hex-value">{{$gc.SerialNumber}}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Signature Algorithm</div>
-                                <div class="detail-box">{{$gc.SignatureAlgorithm}}</div>
-                            </div>
-                        </div>
-                        {{if or $gc.IsCA $gc.HasPathLenConstraint}}
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Public Key</div>
-                                <div class="detail-box">{{$gc.PublicKeyInfo}}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Basic Constraints</div>
-                                <div class="detail-box">CA: {{if $gc.IsCA}}Yes{{else}}No{{end}}{{if $gc.HasPathLenConstraint}}, Path Length: {{$gc.PathLenConstraint}}{{end}}</div>
-                            </div>
-                        </div>
-                        {{else}}
-                        <div class="detail-item">
-                            <div class="detail-label">Public Key</div>
-                            <div class="detail-box">{{$gc.PublicKeyInfo}}</div>
-                        </div>
-                        {{end}}
-                        {{if $gc.KeyUsage}}
-                        <div class="detail-item">
-                            <div class="detail-label">Key Usage</div>
-                            <div class="detail-box">{{$gc.KeyUsage}}</div>
-                        </div>
-                        {{end}}
-                        {{if $gc.ExtKeyUsage}}
-                        <div class="detail-item">
-                            <div class="detail-label">Extended Key Usage</div>
-                            <div class="detail-box">{{$gc.ExtKeyUsage}}</div>
-                        </div>
-                        {{end}}
-                        {{if $gc.CAIssuersURLs}}
-                        <div class="detail-item">
-                            <div class="detail-label">CA Issuers URL</div>
-                            <div class="detail-box detail-box-mono">
-                                <div class="ca-issuers-list">
-                                    {{range $gc.CAIssuersURLs}}
-                                    <a class="ca-issuers-link" href="{{.}}" rel="noopener noreferrer" target="_blank">{{.}}</a>
-                                    {{end}}
-                                </div>
-                            </div>
-                        </div>
-                        {{end}}
-                        {{if $gc.SANs}}
-                        <div class="detail-item">
-                            <div class="detail-label">Subject Alternative Names ({{len $gc.SANs}})</div>
-                            <div class="san-wrap">
-                                <div class="san-list">
-                                    {{range $gc.SANs}}
-                                    <span class="san-pill">{{.}}</span>
-                                    {{end}}
-                                </div>
-                            </div>
-                        </div>
-                        {{end}}
-                        <div class="detail-grid">
-                            {{if $gc.SKI}}
-                            <div class="detail-item">
-                                <div class="detail-label">Subject Key Identifier</div>
-                                <div class="detail-box detail-box-mono hex-value">{{$gc.SKI}}</div>
-                            </div>
-                            {{end}}
-                            {{if $gc.AKI}}
-                            <div class="detail-item">
-                                <div class="detail-label">Authority Key Identifier</div>
-                                <div class="detail-box detail-box-mono hex-value">{{$gc.AKI}}</div>
-                            </div>
-                            {{end}}
-                        </div>
-                        {{if $gc.SHA256Fingerprint}}
-                        <div class="detail-item">
-                            <div class="detail-label">SHA-256 Fingerprint</div>
-                            <div class="detail-box detail-box-mono hex-value">{{$gc.SHA256Fingerprint}}</div>
-                        </div>
-                        {{end}}
-                        {{if $gc.SHA1Fingerprint}}
-                        <div class="detail-item">
-                            <div class="detail-label">SHA-1 Fingerprint</div>
-                            <div class="detail-box detail-box-mono hex-value">{{$gc.SHA1Fingerprint}}</div>
-                        </div>
-                        {{end}}
-                        </div>
-                        </div>
-                        <div class="cert-tab-panel hidden" data-cert-tab-panel="advanced">
-                            <pre class="advanced-decode">{{$gc.AdvancedDecode}}</pre>
+                        <div class="cert-tab-panel hidden" data-cert-tab-panel="raw">
+                            {{template "cert-raw-details" $gc}}
                         </div>
                     </div>
                 </div>
@@ -268,151 +148,22 @@
                     </div>
                     <div class="details-column" data-cert-tabs>
                         <div class="cert-tab-list" role="tablist" aria-label="Certificate decode view">
-                            <button type="button" class="cert-tab-button is-active" role="tab" aria-selected="true" data-cert-tab-button="basic" onclick="switchCertDecodeTab(this, 'basic')">Basic</button>
-                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="advanced" onclick="switchCertDecodeTab(this, 'advanced')">Advanced</button>
+                            <button type="button" class="cert-tab-button is-active" role="tab" aria-selected="true" data-cert-tab-button="overview" onclick="switchCertDecodeTab(this, 'overview')">Overview</button>
+                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="usage" onclick="switchCertDecodeTab(this, 'usage')">Usage</button>
+                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="extensions" onclick="switchCertDecodeTab(this, 'extensions')">Extensions</button>
+                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="raw" onclick="switchCertDecodeTab(this, 'raw')">Raw</button>
                         </div>
-                        <div class="cert-tab-panel" data-cert-tab-panel="basic">
-                        <div class="details-stack">
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Subject</div>
-                                <div class="detail-box {{$cert.SubjectColor}}">{{$cert.SubjectDN}}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Issuer</div>
-                                <div class="detail-box {{$cert.IssuerColor}}">{{$cert.IssuerDN}}</div>
-                            </div>
+                        <div class="cert-tab-panel" data-cert-tab-panel="overview">
+                            {{template "cert-overview-details" $cert}}
                         </div>
-
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Not Before</div>
-                                <div class="detail-value {{if $cert.IsNotYetValid}}detail-future{{else}}detail-valid{{end}}">{{$cert.NotBeforeFormatted}}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Not After</div>
-                                <div class="detail-value {{if $cert.IsExpired}}detail-expired{{else}}detail-valid{{end}}">{{$cert.NotAfterFormatted}}</div>
-                            </div>
+                        <div class="cert-tab-panel hidden" data-cert-tab-panel="usage">
+                            {{template "cert-usage-details" $cert}}
                         </div>
-
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Validity Period</div>
-                                <div class="detail-value detail-muted">{{$cert.ValidityPeriod}}</div>
-                            </div>
-                            <div class="detail-item">
-                                {{if $cert.IsExpired}}
-                                <div class="detail-label">Expired</div>
-                                <div class="detail-value detail-expired">{{$cert.ExpiresIn}} ago</div>
-                                {{else if $cert.IsNotYetValid}}
-                                <div class="detail-label">Starts In</div>
-                                <div class="detail-value detail-future">not yet valid</div>
-                                {{else}}
-                                <div class="detail-label">Expires In</div>
-                                <div class="detail-value detail-valid">{{$cert.ExpiresIn}}</div>
-                                {{end}}
-                            </div>
+                        <div class="cert-tab-panel hidden" data-cert-tab-panel="extensions">
+                            {{template "cert-extensions-details" $cert}}
                         </div>
-
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Serial Number</div>
-                                <div class="detail-box detail-box-mono hex-value">{{$cert.SerialNumber}}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Signature Algorithm</div>
-                                <div class="detail-box">{{$cert.SignatureAlgorithm}}</div>
-                            </div>
-                        </div>
-
-                        {{if or $cert.IsCA $cert.HasPathLenConstraint}}
-                        <div class="detail-grid">
-                            <div class="detail-item">
-                                <div class="detail-label">Public Key</div>
-                                <div class="detail-box">{{$cert.PublicKeyInfo}}</div>
-                            </div>
-                            <div class="detail-item">
-                                <div class="detail-label">Basic Constraints</div>
-                                <div class="detail-box">CA: {{if $cert.IsCA}}Yes{{else}}No{{end}}{{if $cert.HasPathLenConstraint}}, Path Length: {{$cert.PathLenConstraint}}{{end}}</div>
-                            </div>
-                        </div>
-                        {{else}}
-                        <div class="detail-item">
-                            <div class="detail-label">Public Key</div>
-                            <div class="detail-box">{{$cert.PublicKeyInfo}}</div>
-                        </div>
-                        {{end}}
-
-                        {{if $cert.KeyUsage}}
-                        <div class="detail-item">
-                            <div class="detail-label">Key Usage</div>
-                            <div class="detail-box">{{$cert.KeyUsage}}</div>
-                        </div>
-                        {{end}}
-
-                        {{if $cert.ExtKeyUsage}}
-                        <div class="detail-item">
-                            <div class="detail-label">Extended Key Usage</div>
-                            <div class="detail-box">{{$cert.ExtKeyUsage}}</div>
-                        </div>
-                        {{end}}
-                        {{if $cert.CAIssuersURLs}}
-                        <div class="detail-item">
-                            <div class="detail-label">CA Issuers URL</div>
-                            <div class="detail-box detail-box-mono">
-                                <div class="ca-issuers-list">
-                                    {{range $cert.CAIssuersURLs}}
-                                    <a class="ca-issuers-link" href="{{.}}" rel="noopener noreferrer" target="_blank">{{.}}</a>
-                                    {{end}}
-                                </div>
-                            </div>
-                        </div>
-                        {{end}}
-
-                        {{if $cert.SANs}}
-                        <div class="detail-item">
-                            <div class="detail-label">Subject Alternative Names ({{len $cert.SANs}})</div>
-                            <div class="san-wrap">
-                                <div class="san-list">
-                                    {{range $cert.SANs}}
-                                    <span class="san-pill">{{.}}</span>
-                                    {{end}}
-                                </div>
-                            </div>
-                        </div>
-                        {{end}}
-
-                        <div class="detail-grid">
-                            {{if $cert.SKI}}
-                            <div class="detail-item">
-                                <div class="detail-label">Subject Key Identifier</div>
-                                <div class="detail-box detail-box-mono hex-value">{{$cert.SKI}}</div>
-                            </div>
-                            {{end}}
-                            {{if $cert.AKI}}
-                            <div class="detail-item">
-                                <div class="detail-label">Authority Key Identifier</div>
-                                <div class="detail-box detail-box-mono hex-value">{{$cert.AKI}}</div>
-                            </div>
-                            {{end}}
-                        </div>
-
-                        {{if $cert.SHA256Fingerprint}}
-                        <div class="detail-item">
-                            <div class="detail-label">SHA-256 Fingerprint</div>
-                            <div class="detail-box detail-box-mono hex-value">{{$cert.SHA256Fingerprint}}</div>
-                        </div>
-                        {{end}}
-                        {{if $cert.SHA1Fingerprint}}
-                        <div class="detail-item">
-                            <div class="detail-label">SHA-1 Fingerprint</div>
-                            <div class="detail-box detail-box-mono hex-value">{{$cert.SHA1Fingerprint}}</div>
-                        </div>
-                        {{end}}
-                        </div>
-                        </div>
-                        <div class="cert-tab-panel hidden" data-cert-tab-panel="advanced">
-                            <pre class="advanced-decode">{{$cert.AdvancedDecode}}</pre>
+                        <div class="cert-tab-panel hidden" data-cert-tab-panel="raw">
+                            {{template "cert-raw-details" $cert}}
                         </div>
                     </div>
                 </div>
@@ -420,5 +171,304 @@
             {{end}}
         </div>
     </div>
+</div>
+{{end}}
+
+{{define "cert-overview-details"}}
+<div class="details-stack">
+    {{if or .SubjectDN .IssuerDN .SANs}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Identity</h4>
+        <div class="detail-grid">
+            {{if .SubjectDN}}
+            <div class="detail-item">
+                <div class="detail-label">Subject</div>
+                <div class="detail-box {{.SubjectColor}}">{{.SubjectDN}}</div>
+            </div>
+            {{end}}
+            {{if .IssuerDN}}
+            <div class="detail-item">
+                <div class="detail-label">Issuer</div>
+                <div class="detail-box {{.IssuerColor}}">{{.IssuerDN}}</div>
+            </div>
+            {{end}}
+        </div>
+        {{if .SANs}}
+        <div class="detail-item">
+            <div class="detail-label">Subject Alternative Names ({{len .SANs}})</div>
+            <div class="san-wrap">
+                <div class="san-list">
+                    {{range .SANs}}
+                    <span class="san-pill">{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </section>
+    {{end}}
+
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Validity</h4>
+        <div class="detail-grid">
+            <div class="detail-item">
+                <div class="detail-label">Not Before</div>
+                <div class="detail-value {{if .IsNotYetValid}}detail-future{{else}}detail-valid{{end}}">{{.NotBeforeFormatted}}</div>
+            </div>
+            <div class="detail-item">
+                <div class="detail-label">Not After</div>
+                <div class="detail-value {{if .IsExpired}}detail-expired{{else}}detail-valid{{end}}">{{.NotAfterFormatted}}</div>
+            </div>
+        </div>
+        <div class="detail-grid">
+            <div class="detail-item">
+                <div class="detail-label">Validity Period</div>
+                <div class="detail-value detail-muted">{{.ValidityPeriod}}</div>
+            </div>
+            <div class="detail-item">
+                {{if .IsExpired}}
+                <div class="detail-label">Expired</div>
+                <div class="detail-value detail-expired">{{.ExpiresIn}} ago</div>
+                {{else if .IsNotYetValid}}
+                <div class="detail-label">Starts In</div>
+                <div class="detail-value detail-future">not yet valid</div>
+                {{else}}
+                <div class="detail-label">Expires In</div>
+                <div class="detail-value detail-valid">{{.ExpiresIn}}</div>
+                {{end}}
+            </div>
+        </div>
+    </section>
+
+    {{if or .PublicKeyInfo .SignatureAlgorithm}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Cryptography</h4>
+        <div class="detail-grid">
+            {{if .PublicKeyInfo}}
+            <div class="detail-item">
+                <div class="detail-label">Public Key</div>
+                <div class="detail-box">{{.PublicKeyInfo}}</div>
+            </div>
+            {{end}}
+            {{if .SignatureAlgorithm}}
+            <div class="detail-item">
+                <div class="detail-label">Signature Algorithm</div>
+                <div class="detail-box">{{.SignatureAlgorithm}}</div>
+            </div>
+            {{end}}
+        </div>
+    </section>
+    {{end}}
+
+    {{if or .SerialNumber .SHA256Fingerprint .SHA1Fingerprint}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Identifiers</h4>
+        {{if .SerialNumber}}
+        <div class="detail-item">
+            <div class="detail-label">Serial Number</div>
+            <div class="detail-box detail-box-mono hex-value">{{.SerialNumber}}</div>
+        </div>
+        {{end}}
+        {{if .SHA256Fingerprint}}
+        <div class="detail-item">
+            <div class="detail-label">SHA-256 Fingerprint</div>
+            <div class="detail-box detail-box-mono hex-value">{{.SHA256Fingerprint}}</div>
+        </div>
+        {{end}}
+        {{if .SHA1Fingerprint}}
+        <div class="detail-item">
+            <div class="detail-label">SHA-1 Fingerprint</div>
+            <div class="detail-box detail-box-mono hex-value">{{.SHA1Fingerprint}}</div>
+        </div>
+        {{end}}
+    </section>
+    {{end}}
+</div>
+{{end}}
+
+{{define "cert-usage-details"}}
+<div class="details-stack">
+    {{if or .HasBasicConstraints .KeyUsage .ExtKeyUsage}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Usage</h4>
+        {{if .HasBasicConstraints}}
+        <div class="detail-grid">
+            <div class="detail-item">
+                <div class="detail-label">CA</div>
+                <div class="detail-box">{{if .IsCA}}Yes{{else}}No{{end}}</div>
+            </div>
+            {{if .HasPathLenConstraint}}
+            <div class="detail-item">
+                <div class="detail-label">Path Length</div>
+                <div class="detail-box">{{.PathLenConstraint}}</div>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+        {{if .KeyUsage}}
+        <div class="detail-item">
+            <div class="detail-label">Key Usage</div>
+            <div class="detail-box">{{.KeyUsage}}</div>
+        </div>
+        {{end}}
+        {{if .ExtKeyUsage}}
+        <div class="detail-item">
+            <div class="detail-label">Extended Key Usage</div>
+            <div class="detail-box">{{.ExtKeyUsage}}</div>
+        </div>
+        {{end}}
+    </section>
+    {{else}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Usage</h4>
+        <div class="detail-box detail-muted">No decoded usage extensions available.</div>
+    </section>
+    {{end}}
+</div>
+{{end}}
+
+{{define "cert-extensions-details"}}
+<div class="details-stack">
+    {{if or .CAIssuersURLs .OCSPURLs}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Authority Information Access</h4>
+        {{if .CAIssuersURLs}}
+        <div class="detail-item">
+            <div class="detail-label">CA Issuers URL</div>
+            <div class="detail-box detail-box-mono">
+                <div class="ca-issuers-list">
+                    {{range .CAIssuersURLs}}
+                    <span>{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+        {{if .OCSPURLs}}
+        <div class="detail-item">
+            <div class="detail-label">OCSP URL</div>
+            <div class="detail-box detail-box-mono">
+                <div class="ca-issuers-list">
+                    {{range .OCSPURLs}}
+                    <span>{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </section>
+    {{end}}
+
+    {{if or .SKI .AKI}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Key Identifiers</h4>
+        {{if or .SKI .AKI}}
+        <div class="detail-grid">
+            {{if .SKI}}
+            <div class="detail-item">
+                <div class="detail-label">Subject Key Identifier</div>
+                <div class="detail-box detail-box-mono hex-value">{{.SKI}}</div>
+            </div>
+            {{end}}
+            {{if .AKI}}
+            <div class="detail-item">
+                <div class="detail-label">Authority Key Identifier</div>
+                <div class="detail-box detail-box-mono hex-value">{{.AKI}}</div>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+    </section>
+    {{end}}
+
+    {{if .NameConstraints}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Name Constraints</h4>
+        <div class="detail-item">
+            <div class="detail-label">Name Constraints</div>
+            <div class="san-wrap">
+                <div class="san-list">
+                    {{range .NameConstraints}}
+                    <span class="san-pill">{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </section>
+    {{end}}
+
+    {{if .CRLDistributionPoints}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Revocation</h4>
+        <div class="detail-item">
+            <div class="detail-label">CRL Distribution Points</div>
+            <div class="detail-box detail-box-mono">
+                <div class="ca-issuers-list">
+                    {{range .CRLDistributionPoints}}
+                    <span>{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </section>
+    {{end}}
+
+    {{if or .CertificatePolicies .PolicyConstraints .PolicyMappings}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Policies</h4>
+        {{if .CertificatePolicies}}
+        <div class="detail-item">
+            <div class="detail-label">Certificate Policies</div>
+            <div class="detail-box detail-box-mono">
+                <div class="ca-issuers-list">
+                    {{range .CertificatePolicies}}
+                    <span>{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+        {{if .PolicyConstraints}}
+        <div class="detail-item">
+            <div class="detail-label">Policy Constraints</div>
+            <div class="detail-box detail-box-mono">
+                <div class="ca-issuers-list">
+                    {{range .PolicyConstraints}}
+                    <span>{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+        {{if .PolicyMappings}}
+        <div class="detail-item">
+            <div class="detail-label">Policy Mappings</div>
+            <div class="detail-box detail-box-mono">
+                <div class="ca-issuers-list">
+                    {{range .PolicyMappings}}
+                    <span>{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </section>
+    {{end}}
+
+    {{if not (or .CAIssuersURLs .OCSPURLs .SKI .AKI .NameConstraints .CRLDistributionPoints .CertificatePolicies .PolicyConstraints .PolicyMappings)}}
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Extensions</h4>
+        <div class="detail-box detail-muted">No decoded extension details available.</div>
+    </section>
+    {{end}}
+</div>
+{{end}}
+
+{{define "cert-raw-details"}}
+<div class="details-stack">
+    <section class="cert-detail-section">
+        <h4 class="detail-section-title">Raw Decode</h4>
+        <pre class="advanced-decode">{{.AdvancedDecode}}</pre>
+    </section>
 </div>
 {{end}}

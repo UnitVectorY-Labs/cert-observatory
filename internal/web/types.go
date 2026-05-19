@@ -58,38 +58,45 @@ type CrawlResultInput struct {
 
 // CertViewData is the view model for certificate display.
 type CertViewData struct {
-	HashHex              string
-	Position             int
-	PEM                  string
-	SubjectCN            string
-	SubjectDN            string
-	IssuerDN             string
-	NotBeforeFormatted   string
-	NotAfterFormatted    string
-	NotBefore            time.Time
-	NotAfter             time.Time
-	IsExpired            bool
-	IsNotYetValid        bool
-	ValidityDays         int
-	ValidityPeriod       string
-	ExpiresIn            string
-	IsCA                 bool
-	IsSelfSigned         bool
-	HasPathLenConstraint bool
-	PathLenConstraint    int
-	SerialNumber         string
-	SignatureAlgorithm   string
-	PublicKeyInfo        string
-	SANs                 []string
-	CAIssuersURLs        []string
-	KeyUsage             string
-	ExtKeyUsage          string
-	SKI                  string
-	AKI                  string
-	SHA1Fingerprint      string
-	SHA256Fingerprint    string
-	AdvancedDecode       string
-	PossibleIssuers      []string
+	HashHex               string
+	Position              int
+	PEM                   string
+	SubjectCN             string
+	SubjectDN             string
+	IssuerDN              string
+	NotBeforeFormatted    string
+	NotAfterFormatted     string
+	NotBefore             time.Time
+	NotAfter              time.Time
+	IsExpired             bool
+	IsNotYetValid         bool
+	ValidityDays          int
+	ValidityPeriod        string
+	ExpiresIn             string
+	IsCA                  bool
+	HasBasicConstraints   bool
+	IsSelfSigned          bool
+	HasPathLenConstraint  bool
+	PathLenConstraint     int
+	SerialNumber          string
+	SignatureAlgorithm    string
+	PublicKeyInfo         string
+	SANs                  []string
+	NameConstraints       []string
+	CAIssuersURLs         []string
+	OCSPURLs              []string
+	CRLDistributionPoints []string
+	CertificatePolicies   []string
+	PolicyConstraints     []string
+	PolicyMappings        []string
+	KeyUsage              string
+	ExtKeyUsage           string
+	SKI                   string
+	AKI                   string
+	SHA1Fingerprint       string
+	SHA256Fingerprint     string
+	AdvancedDecode        string
+	PossibleIssuers       []string
 	// CertLabel is the human-readable label for this certificate's role in the chain
 	CertLabel string
 	// SubjectColor is the CSS color class for the subject DN
@@ -161,7 +168,8 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 	view.IssuerDN = cert.Issuer.String()
 	view.IsCA = cert.IsCA
 	view.IsSelfSigned = isSelfSigned(cert)
-	view.HasPathLenConstraint = cert.BasicConstraintsValid && cert.MaxPathLen >= 0
+	view.HasBasicConstraints = cert.BasicConstraintsValid
+	view.HasPathLenConstraint = cert.BasicConstraintsValid && (cert.MaxPathLen > 0 || cert.MaxPathLenZero)
 	view.PathLenConstraint = cert.MaxPathLen
 	view.SerialNumber = formatSerialNumber(cert.SerialNumber.Bytes())
 	view.SignatureAlgorithm = cert.SignatureAlgorithm.String()
@@ -181,6 +189,12 @@ func populateFromParsedCert(view *CertViewData, cert *x509.Certificate) {
 		}
 	}
 	view.CAIssuersURLs = append(view.CAIssuersURLs, cert.IssuingCertificateURL...)
+	view.OCSPURLs = append(view.OCSPURLs, cert.OCSPServer...)
+	view.CRLDistributionPoints = append(view.CRLDistributionPoints, cert.CRLDistributionPoints...)
+	view.NameConstraints = formatNameConstraints(cert)
+	view.CertificatePolicies = formatCertificatePolicies(cert)
+	view.PolicyConstraints = formatPolicyConstraints(cert)
+	view.PolicyMappings = formatPolicyMappings(cert)
 
 	// Key Usage
 	view.KeyUsage = formatKeyUsage(cert.KeyUsage)
@@ -222,7 +236,7 @@ func formatAdvancedCertificate(cert *x509.Certificate) string {
 
 	writeAdvancedLine(&b, 2, "X509v3 extensions:")
 	for _, ext := range cert.Extensions {
-		writeAdvancedExtension(&b, ext)
+		writeAdvancedExtension(&b, ext, cert)
 	}
 	if len(cert.UnhandledCriticalExtensions) > 0 {
 		writeAdvancedLine(&b, 2, "Unhandled Critical Extensions:")
@@ -257,7 +271,7 @@ func writeWrappedHex(b *strings.Builder, indent int, data []byte, perLine int) {
 	}
 }
 
-func writeAdvancedExtension(b *strings.Builder, ext pkix.Extension) {
+func writeAdvancedExtension(b *strings.Builder, ext pkix.Extension, cert *x509.Certificate) {
 	name := extensionName(ext.Id)
 	critical := ""
 	if ext.Critical {
@@ -265,7 +279,7 @@ func writeAdvancedExtension(b *strings.Builder, ext pkix.Extension) {
 	}
 	writeAdvancedLine(b, 3, "%s%s:", name, critical)
 
-	if formatted, ok := formatKnownExtension(ext); ok {
+	if formatted, ok := formatKnownExtension(ext, cert); ok {
 		for _, line := range strings.Split(formatted, "\n") {
 			writeAdvancedLine(b, 4, "%s", line)
 		}
@@ -295,19 +309,62 @@ func extensionName(oid asn1.ObjectIdentifier) string {
 	return oid.String()
 }
 
-func formatKnownExtension(ext pkix.Extension) (string, bool) {
+func formatKnownExtension(ext pkix.Extension, cert *x509.Certificate) (string, bool) {
 	switch ext.Id.String() {
-	case "2.5.29.14", "2.5.29.35":
-		var keyID []byte
-		if _, err := asn1.Unmarshal(ext.Value, &keyID); err == nil && len(keyID) > 0 {
-			return formatHexBytes(keyID), true
+	case "2.5.29.14":
+		if len(cert.SubjectKeyId) > 0 {
+			return formatHexBytes(cert.SubjectKeyId), true
+		}
+	case "2.5.29.35":
+		if len(cert.AuthorityKeyId) > 0 {
+			return formatHexBytes(cert.AuthorityKeyId), true
 		}
 	case "2.5.29.15":
+		if usage := formatKeyUsage(cert.KeyUsage); usage != "" {
+			return usage, true
+		}
 		return formatBitStringExtension(ext.Value), true
+	case "2.5.29.17":
+		if san := formatSubjectAlternativeNames(cert); san != "" {
+			return san, true
+		}
 	case "2.5.29.19":
+		if cert.BasicConstraintsValid {
+			return formatParsedBasicConstraints(cert), true
+		}
 		return formatBasicConstraintsExtension(ext.Value), true
+	case "2.5.29.31":
+		if len(cert.CRLDistributionPoints) > 0 {
+			return strings.Join(cert.CRLDistributionPoints, "\n"), true
+		}
+	case "2.5.29.32":
+		if policies := formatCertificatePolicies(cert); len(policies) > 0 {
+			return strings.Join(policies, "\n"), true
+		}
+	case "2.5.29.37":
+		if usage := formatExtKeyUsage(cert.ExtKeyUsage); usage != "" {
+			return usage, true
+		}
+	case "1.3.6.1.5.5.7.1.1":
+		var entries []string
+		for _, url := range cert.IssuingCertificateURL {
+			entries = append(entries, "CA Issuers - URI:"+url)
+		}
+		for _, url := range cert.OCSPServer {
+			entries = append(entries, "OCSP - URI:"+url)
+		}
+		if len(entries) > 0 {
+			return strings.Join(entries, "\n"), true
+		}
 	}
 	return "", false
+}
+
+func formatParsedBasicConstraints(cert *x509.Certificate) string {
+	if cert.MaxPathLen > 0 || cert.MaxPathLenZero {
+		return fmt.Sprintf("CA:%t, pathlen:%d", cert.IsCA, cert.MaxPathLen)
+	}
+	return fmt.Sprintf("CA:%t", cert.IsCA)
 }
 
 func formatBitStringExtension(value []byte) string {
@@ -450,6 +507,70 @@ func formatExtKeyUsage(eku []x509.ExtKeyUsage) string {
 	return strings.Join(usages, ", ")
 }
 
+func formatNameConstraints(cert *x509.Certificate) []string {
+	var constraints []string
+	appendValues := func(label string, values []string) {
+		for _, value := range values {
+			constraints = append(constraints, label+": "+value)
+		}
+	}
+	appendValues("Permitted DNS", cert.PermittedDNSDomains)
+	appendValues("Excluded DNS", cert.ExcludedDNSDomains)
+	appendValues("Permitted Email", cert.PermittedEmailAddresses)
+	appendValues("Excluded Email", cert.ExcludedEmailAddresses)
+	appendValues("Permitted URI Domain", cert.PermittedURIDomains)
+	appendValues("Excluded URI Domain", cert.ExcludedURIDomains)
+	for _, value := range cert.PermittedIPRanges {
+		constraints = append(constraints, "Permitted IP: "+value.String())
+	}
+	for _, value := range cert.ExcludedIPRanges {
+		constraints = append(constraints, "Excluded IP: "+value.String())
+	}
+	return constraints
+}
+
+func formatCertificatePolicies(cert *x509.Certificate) []string {
+	var policies []string
+	seen := make(map[string]struct{})
+	for _, policy := range cert.Policies {
+		value := policy.String()
+		if _, ok := seen[value]; !ok {
+			policies = append(policies, value)
+			seen[value] = struct{}{}
+		}
+	}
+	for _, policy := range cert.PolicyIdentifiers {
+		value := policy.String()
+		if _, ok := seen[value]; !ok {
+			policies = append(policies, value)
+			seen[value] = struct{}{}
+		}
+	}
+	return policies
+}
+
+func formatPolicyConstraints(cert *x509.Certificate) []string {
+	var constraints []string
+	if cert.RequireExplicitPolicy > 0 || cert.RequireExplicitPolicyZero {
+		constraints = append(constraints, fmt.Sprintf("Require Explicit Policy: %d", cert.RequireExplicitPolicy))
+	}
+	if cert.InhibitPolicyMapping > 0 || cert.InhibitPolicyMappingZero {
+		constraints = append(constraints, fmt.Sprintf("Inhibit Policy Mapping: %d", cert.InhibitPolicyMapping))
+	}
+	if cert.InhibitAnyPolicy > 0 || cert.InhibitAnyPolicyZero {
+		constraints = append(constraints, fmt.Sprintf("Inhibit anyPolicy: %d", cert.InhibitAnyPolicy))
+	}
+	return constraints
+}
+
+func formatPolicyMappings(cert *x509.Certificate) []string {
+	mappings := make([]string, 0, len(cert.PolicyMappings))
+	for _, mapping := range cert.PolicyMappings {
+		mappings = append(mappings, mapping.IssuerDomainPolicy.String()+" -> "+mapping.SubjectDomainPolicy.String())
+	}
+	return mappings
+}
+
 // formatCertDuration formats a duration for certificate context using an
 // appropriate combination of years, months, and days.
 func formatCertDuration(d time.Duration) string {
@@ -507,9 +628,9 @@ func parsePEM(pem string) (*x509.Certificate, error) {
 	return info.Parsed, nil
 }
 
-// isSelfSigned checks if a certificate is self-signed by comparing Subject and Issuer.
+// isSelfSigned checks whether a certificate is signed by its own key.
 func isSelfSigned(cert *x509.Certificate) bool {
-	return cert.Subject.String() == cert.Issuer.String()
+	return cert.CheckSignatureFrom(cert) == nil
 }
 
 // chainColorPalette defines the colors used for matching subject/issuer pairs.
