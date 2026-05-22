@@ -60,9 +60,261 @@ function renderTrustPathMermaid(scope) {
     if (!diagrams.length) {
         return;
     }
-    mermaid.run({ nodes: Array.from(diagrams) }).catch(function (err) {
+    mermaid.run({ nodes: Array.from(diagrams) }).then(function () {
+        initializeTrustPathGraphControls(root);
+    }).catch(function (err) {
         console.error("failed to render mermaid trust-path diagram", err);
     });
+}
+
+function parseSVGViewBox(svg) {
+    var attr = svg.getAttribute("viewBox");
+    if (!attr) {
+        return null;
+    }
+    var parts = attr.trim().split(/[\s,]+/).map(Number);
+    if (parts.length !== 4 || parts.some(function (part) { return !Number.isFinite(part); })) {
+        return null;
+    }
+    return {
+        x: parts[0],
+        y: parts[1],
+        width: parts[2],
+        height: parts[3],
+    };
+}
+
+function getSVGViewBox(svg) {
+    var existing = parseSVGViewBox(svg);
+    if (existing) {
+        return existing;
+    }
+
+    var box = svg.getBBox ? svg.getBBox() : null;
+    if (box && box.width > 0 && box.height > 0) {
+        return {
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height,
+        };
+    }
+
+    return { x: 0, y: 0, width: 800, height: 600 };
+}
+
+function setSVGViewBox(svg, viewBox) {
+    svg.setAttribute("viewBox", [
+        viewBox.x,
+        viewBox.y,
+        viewBox.width,
+        viewBox.height,
+    ].join(" "));
+}
+
+function fitViewBoxToSVGAspect(svg, viewBox) {
+    var rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height || !viewBox.width || !viewBox.height) {
+        return viewBox;
+    }
+
+    var svgRatio = rect.width / rect.height;
+    var viewBoxRatio = viewBox.width / viewBox.height;
+    if (!Number.isFinite(svgRatio) || !Number.isFinite(viewBoxRatio) || svgRatio <= 0 || viewBoxRatio <= 0) {
+        return viewBox;
+    }
+
+    if (svgRatio > viewBoxRatio) {
+        var expandedWidth = viewBox.height * svgRatio;
+        return {
+            x: viewBox.x - (expandedWidth - viewBox.width) / 2,
+            y: viewBox.y,
+            width: expandedWidth,
+            height: viewBox.height,
+        };
+    }
+
+    var expandedHeight = viewBox.width / svgRatio;
+    return {
+        x: viewBox.x,
+        y: viewBox.y - (expandedHeight - viewBox.height) / 2,
+        width: viewBox.width,
+        height: expandedHeight,
+    };
+}
+
+function getTrustPathGraphState(svg) {
+    if (!svg.__trustPathPanZoom) {
+        var initial = fitViewBoxToSVGAspect(svg, getSVGViewBox(svg));
+        svg.__trustPathPanZoom = {
+            initial: Object.assign({}, initial),
+            current: Object.assign({}, initial),
+        };
+        setSVGViewBox(svg, initial);
+    }
+    return svg.__trustPathPanZoom;
+}
+
+function clampTrustPathViewBox(svg, next) {
+    var state = getTrustPathGraphState(svg);
+    var minWidth = state.initial.width / 8;
+    var maxWidth = state.initial.width * 2.5;
+    var width = Math.max(minWidth, Math.min(maxWidth, next.width));
+    var height = width * (state.initial.height / state.initial.width);
+    return {
+        x: next.x,
+        y: next.y,
+        width: width,
+        height: height,
+    };
+}
+
+function zoomTrustPathGraph(svg, factor, clientX, clientY) {
+    var state = getTrustPathGraphState(svg);
+    var rect = svg.getBoundingClientRect();
+    var focusX = typeof clientX === "number" && rect.width > 0 ? (clientX - rect.left) / rect.width : 0.5;
+    var focusY = typeof clientY === "number" && rect.height > 0 ? (clientY - rect.top) / rect.height : 0.5;
+    var nextWidth = state.current.width * factor;
+    var nextHeight = state.current.height * factor;
+    var next = clampTrustPathViewBox(svg, {
+        x: state.current.x + (state.current.width - nextWidth) * focusX,
+        y: state.current.y + (state.current.height - nextHeight) * focusY,
+        width: nextWidth,
+        height: nextHeight,
+    });
+
+    state.current = next;
+    setSVGViewBox(svg, next);
+}
+
+function resetTrustPathGraph(svg) {
+    var state = getTrustPathGraphState(svg);
+    state.current = Object.assign({}, state.initial);
+    setSVGViewBox(svg, state.current);
+}
+
+function findTrustPathSVG(control) {
+    var section = control && control.closest ? control.closest(".section-card") : null;
+    return section ? section.querySelector(".trust-path-mermaid svg") : null;
+}
+
+function initializeTrustPathPanZoom(svg) {
+    if (!svg || svg.dataset.trustPathPanZoom === "ready") {
+        return;
+    }
+    svg.dataset.trustPathPanZoom = "ready";
+    svg.setAttribute("role", "img");
+    svg.style.touchAction = "none";
+    getTrustPathGraphState(svg);
+
+    var drag = {
+        active: false,
+        moved: false,
+        pointerId: null,
+        clientX: 0,
+        clientY: 0,
+    };
+
+    svg.addEventListener("pointerdown", function (evt) {
+        if (evt.button !== 0) {
+            return;
+        }
+        if (evt.target && evt.target.closest && evt.target.closest(".node")) {
+            drag.active = false;
+            drag.moved = false;
+            return;
+        }
+        drag.active = true;
+        drag.moved = false;
+        drag.pointerId = evt.pointerId;
+        drag.clientX = evt.clientX;
+        drag.clientY = evt.clientY;
+        evt.currentTarget.classList.add("is-panning");
+        evt.currentTarget.setPointerCapture(evt.pointerId);
+    });
+
+    svg.addEventListener("pointermove", function (evt) {
+        if (!drag.active || drag.pointerId !== evt.pointerId) {
+            return;
+        }
+        var svgEl = evt.currentTarget;
+        var state = getTrustPathGraphState(svgEl);
+        var rect = svgEl.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+            return;
+        }
+        var dx = evt.clientX - drag.clientX;
+        var dy = evt.clientY - drag.clientY;
+        if (Math.abs(dx) + Math.abs(dy) > 3) {
+            drag.moved = true;
+        }
+        drag.clientX = evt.clientX;
+        drag.clientY = evt.clientY;
+        state.current = {
+            x: state.current.x - dx * (state.current.width / rect.width),
+            y: state.current.y - dy * (state.current.height / rect.height),
+            width: state.current.width,
+            height: state.current.height,
+        };
+        setSVGViewBox(svgEl, state.current);
+    });
+
+    svg.addEventListener("pointerup", function (evt) {
+        if (drag.active && drag.pointerId === evt.pointerId) {
+            evt.currentTarget.classList.remove("is-panning");
+            drag.active = false;
+        }
+    });
+
+    svg.addEventListener("pointercancel", function (evt) {
+        evt.currentTarget.classList.remove("is-panning");
+        drag.active = false;
+    });
+
+    svg.addEventListener("click", function (evt) {
+        var nodeEl = evt.target && evt.target.closest ? evt.target.closest(".node.interactive") : null;
+        if (nodeEl) {
+            evt.preventDefault();
+            evt.stopImmediatePropagation();
+            drag.moved = false;
+            selectTrustPathCertFromMermaid(getRenderedMermaidNodeID(nodeEl));
+            return;
+        }
+        if (drag.moved) {
+            evt.preventDefault();
+            evt.stopImmediatePropagation();
+            drag.moved = false;
+        }
+    }, true);
+}
+
+function initializeTrustPathGraphControls(scope) {
+    var root = scope || document;
+    var wrappers = root.querySelectorAll ? root.querySelectorAll(".trust-path-mermaid") : [];
+    for (var i = 0; i < wrappers.length; i++) {
+        initializeTrustPathPanZoom(wrappers[i].querySelector("svg"));
+    }
+
+    var controls = root.querySelectorAll ? root.querySelectorAll("[data-graph-action]") : [];
+    for (var j = 0; j < controls.length; j++) {
+        if (controls[j].dataset.graphControls === "ready") {
+            continue;
+        }
+        controls[j].dataset.graphControls = "ready";
+        controls[j].addEventListener("click", function (evt) {
+            var svg = findTrustPathSVG(evt.currentTarget);
+            if (!svg) {
+                return;
+            }
+            if (evt.currentTarget.dataset.graphAction === "zoom-in") {
+                zoomTrustPathGraph(svg, 0.8);
+            } else if (evt.currentTarget.dataset.graphAction === "zoom-out") {
+                zoomTrustPathGraph(svg, 1.25);
+            } else {
+                resetTrustPathGraph(svg);
+            }
+        });
+    }
 }
 
 function copyPEM(button, certHash) {
@@ -140,6 +392,25 @@ function findRenderedMermaidNodes(nodeId) {
         }
     }
     return matches;
+}
+
+function getRenderedMermaidNodeID(nodeEl) {
+    if (!nodeEl) {
+        return "";
+    }
+    if (nodeEl.dataset && nodeEl.dataset.id) {
+        return nodeEl.dataset.id;
+    }
+
+    var mapEntries = document.querySelectorAll(".tp-node-map");
+    var renderedID = nodeEl.id || "";
+    for (var i = 0; i < mapEntries.length; i++) {
+        var nodeID = mapEntries[i].dataset.nodeId;
+        if (renderedID === nodeID || renderedID.indexOf("-" + nodeID + "-") !== -1) {
+            return nodeID;
+        }
+    }
+    return renderedID;
 }
 
 function findRenderedMermaidEdges(nodeId) {
