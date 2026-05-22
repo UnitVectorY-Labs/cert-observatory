@@ -316,11 +316,11 @@ a {
 }
 
 .graph-scroll {
-  @apply overflow-x-auto py-3;
+  @apply py-3;
 }
 
 .graph-center {
-  @apply flex min-w-full justify-center;
+  @apply block min-w-full;
 }
 
 .selected-heading {
@@ -538,7 +538,7 @@ a {
 }
 
 .graph-download-row {
-  @apply flex justify-end pt-1;
+  @apply flex items-center justify-between gap-3 pt-1;
 }
 
 .btn-graph-download {
@@ -547,19 +547,31 @@ a {
   @apply dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100;
 }
 
+.graph-controls {
+  @apply flex items-center gap-1;
+}
+
+.btn-graph-control {
+  @apply inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600;
+  @apply transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500;
+  @apply dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100;
+}
+
 .trust-path-mermaid {
-  width: min(100%, 56rem);
-  margin-left: auto;
-  margin-right: auto;
+  width: 100%;
 }
 
 .trust-path-mermaid svg {
   display: block;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-  margin-left: auto;
-  margin-right: auto;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: clamp(24rem, 54vh, 38rem) !important;
+  cursor: grab;
+  user-select: none;
+}
+
+.trust-path-mermaid svg.is-panning {
+  cursor: grabbing;
 }
 
 .trust-path-mermaid .mermaid {
