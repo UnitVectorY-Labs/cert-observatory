@@ -611,6 +611,48 @@ func TestBuildChainGraph_CrossSigning(t *testing.T) {
 	if len(graph.Root.Issuers) < 1 {
 		t.Fatal("expected at least 1 issuer for leaf in cross-signing scenario")
 	}
+	if len(graph.Legend.CrossSignedMarkers) != 1 {
+		t.Fatalf("expected one cross-signed marker in legend, got %d", len(graph.Legend.CrossSignedMarkers))
+	}
+	if graph.Legend.CrossSignedMarkers[0] != "🔴" {
+		t.Fatalf("expected first cross-signed marker to be red circle, got %q", graph.Legend.CrossSignedMarkers[0])
+	}
+	if count := strings.Count(graph.MermaidDiagram, "🔴 Cross-Signed Inter"); count != 2 {
+		t.Fatalf("expected both cross-signed intermediates to be marked, count=%d diagram=\n%s", count, graph.MermaidDiagram)
+	}
+}
+
+func TestBuildChainGraph_DoesNotMarkSameSubjectWithDifferentPublicKeysAsCrossSigned(t *testing.T) {
+	rootA := generateSelfSignedRoot(t, "Subject Root A")
+	rootB := generateSelfSignedRoot(t, "Subject Root B")
+	interA := generateSignedIntermediate(t, "Same Subject Inter", rootA)
+	interB := generateSignedIntermediate(t, "Same Subject Inter", rootB)
+
+	diagram, _, legend := buildMermaidDiagram(&ChainGraphNode{
+		HashHex:              hex.EncodeToString(interA.hash),
+		SubjectCN:            "Same Subject Inter",
+		SubjectDN:            interA.cert.Subject.String(),
+		IsCA:                 true,
+		PublicKeySPKIHashHex: publicKeySPKIHashHex(interA.result),
+		CertIndex:            0,
+		Issuers: []*ChainGraphNode{
+			{
+				HashHex:              hex.EncodeToString(interB.hash),
+				SubjectCN:            "Same Subject Inter",
+				SubjectDN:            interB.cert.Subject.String(),
+				IsCA:                 true,
+				PublicKeySPKIHashHex: publicKeySPKIHashHex(interB.result),
+				CertIndex:            1,
+			},
+		},
+	})
+
+	if len(legend.CrossSignedMarkers) != 0 {
+		t.Fatalf("did not expect cross-signed markers for different public keys, got %v", legend.CrossSignedMarkers)
+	}
+	if strings.Contains(diagram, "🔴 Same Subject Inter") {
+		t.Fatalf("did not expect same-subject certificates with different public keys to be marked:\n%s", diagram)
+	}
 }
 
 func TestBuildChainGraph_EmptyChain(t *testing.T) {

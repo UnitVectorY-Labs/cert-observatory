@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -31,6 +32,10 @@ type ChainGraphNode struct {
 	IsMissing bool
 	// IsExpired indicates the certificate is expired as of graph build time.
 	IsExpired bool
+	// PublicKeySPKIHashHex is the SHA-256 hash of SubjectPublicKeyInfo.
+	PublicKeySPKIHashHex string
+	// CrossSignedMarker is a graph-local marker shared by certificates with the same subject and public key.
+	CrossSignedMarker string
 	// CertIndex is the index into ChainGraphData.AllCerts (-1 if missing).
 	CertIndex int
 	// Issuers are the certificates whose public key signed this certificate.
@@ -58,6 +63,8 @@ type ChainGraphLegend struct {
 	HasRootCA            bool
 	HasMissing           bool
 	HasExpired           bool
+	CrossSignedMarkers   []string
+	CrossSignedMarkerKey string
 }
 
 // ChainGraphFilters controls which certificates are included in the graph.
@@ -131,12 +138,15 @@ type mermaidGraphBuilder struct {
 	edges           map[string]bool
 	lines           []string
 	hasExpired      bool
+	crossMarkers    []string
 }
 
 func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGraphLegend) {
 	if root == nil {
 		return "", nil, ChainGraphLegend{}
 	}
+
+	crossMarkers := assignCrossSignedMarkers(root)
 
 	b := &mermaidGraphBuilder{
 		nodeIDByHash:    make(map[string]string),
@@ -145,6 +155,7 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		classMembers:    make(map[string][]string),
 		edges:           make(map[string]bool),
 		lines:           []string{"flowchart TB"},
+		crossMarkers:    crossMarkers,
 	}
 
 	b.walk(root)
@@ -185,9 +196,97 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		HasRootCA:            len(b.classMembers["root"]) > 0,
 		HasMissing:           len(b.classMembers["missing"]) > 0,
 		HasExpired:           b.hasExpired,
+		CrossSignedMarkers:   b.crossMarkers,
+		CrossSignedMarkerKey: strings.Join(b.crossMarkers, " / "),
 	}
 
 	return strings.Join(b.lines, "\n"), b.nodeToCertIndex, legend
+}
+
+var crossSignedMarkers = []string{
+	"🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤",
+	"🟥", "🟧", "🟨", "🟩", "🟦", "🟪", "🟫",
+}
+
+type crossGroup struct {
+	firstSeen int
+	nodes     []*ChainGraphNode
+}
+
+func assignCrossSignedMarkers(root *ChainGraphNode) []string {
+	nodes := collectUniqueCertNodes(root)
+	groups := make(map[string]*crossGroup)
+
+	for i, node := range nodes {
+		if node == nil || node.IsMissing || node.HashHex == "" || node.SubjectDN == "" || node.PublicKeySPKIHashHex == "" {
+			continue
+		}
+		groupKey := node.SubjectDN + "\x00" + node.PublicKeySPKIHashHex
+		group := groups[groupKey]
+		if group == nil {
+			group = &crossGroup{firstSeen: i}
+			groups[groupKey] = group
+		}
+		group.nodes = append(group.nodes, node)
+	}
+
+	var ordered []*crossGroup
+	for _, group := range groups {
+		if len(group.nodes) > 1 {
+			ordered = append(ordered, group)
+		}
+	}
+	sortCrossGroupsByFirstSeen(ordered)
+
+	markerCount := len(ordered)
+	if markerCount > len(crossSignedMarkers) {
+		markerCount = len(crossSignedMarkers)
+	}
+	usedMarkers := make([]string, 0, markerCount)
+	for i := 0; i < markerCount; i++ {
+		marker := crossSignedMarkers[i]
+		usedMarkers = append(usedMarkers, marker)
+		for _, node := range ordered[i].nodes {
+			node.CrossSignedMarker = marker
+		}
+	}
+
+	return usedMarkers
+}
+
+func collectUniqueCertNodes(root *ChainGraphNode) []*ChainGraphNode {
+	var nodes []*ChainGraphNode
+	seen := make(map[string]bool)
+	var walk func(*ChainGraphNode)
+	walk = func(node *ChainGraphNode) {
+		if node == nil {
+			return
+		}
+		if !node.IsMissing && node.HashHex != "" {
+			if seen[node.HashHex] {
+				return
+			}
+			seen[node.HashHex] = true
+			nodes = append(nodes, node)
+		}
+		for _, issuer := range node.Issuers {
+			walk(issuer)
+		}
+	}
+	walk(root)
+	return nodes
+}
+
+func sortCrossGroupsByFirstSeen(groups []*crossGroup) {
+	for i := 1; i < len(groups); i++ {
+		current := groups[i]
+		j := i - 1
+		for j >= 0 && groups[j].firstSeen > current.firstSeen {
+			groups[j+1] = groups[j]
+			j--
+		}
+		groups[j+1] = current
+	}
 }
 
 func (b *mermaidGraphBuilder) addClassMember(className, nodeID string) {
@@ -269,6 +368,9 @@ func (b *mermaidGraphBuilder) ensureNode(node *ChainGraphNode) string {
 		label = "⛔ " + label
 		b.hasExpired = true
 	}
+	if node.CrossSignedMarker != "" {
+		label = node.CrossSignedMarker + " " + label
+	}
 	label = escapeMermaidLabel(label)
 	b.lines = append(b.lines, fmt.Sprintf("%s[\"%s\"]", nodeID, label))
 
@@ -316,15 +418,16 @@ func (b *chainGraphBuilder) buildNode(cert *CertificateResult, visited map[strin
 	selfSigned := isSignatureSelfSigned(cert)
 
 	node := &ChainGraphNode{
-		HashHex:      hashHex,
-		SubjectCN:    extractCN(certSubjectDN(cert)),
-		SubjectDN:    certSubjectDN(cert),
-		IssuerDN:     certIssuerDN(cert),
-		InChain:      b.chainSet[hashHex],
-		IsSelfSigned: selfSigned,
-		IsCA:         isCA(cert),
-		IsExpired:    isExpiredAt(cert, time.Now()),
-		CertIndex:    certIdx,
+		HashHex:              hashHex,
+		SubjectCN:            extractCN(certSubjectDN(cert)),
+		SubjectDN:            certSubjectDN(cert),
+		IssuerDN:             certIssuerDN(cert),
+		InChain:              b.chainSet[hashHex],
+		IsSelfSigned:         selfSigned,
+		IsCA:                 isCA(cert),
+		IsExpired:            isExpiredAt(cert, time.Now()),
+		PublicKeySPKIHashHex: publicKeySPKIHashHex(cert),
+		CertIndex:            certIdx,
 	}
 
 	// Self-signed certificates are roots; don't look for issuers
@@ -495,4 +598,12 @@ func isCA(cert *CertificateResult) bool {
 		return cert.Parsed.IsCA
 	}
 	return false
+}
+
+func publicKeySPKIHashHex(cert *CertificateResult) string {
+	if cert == nil || cert.Parsed == nil || len(cert.Parsed.RawSubjectPublicKeyInfo) == 0 {
+		return ""
+	}
+	hash := sha256.Sum256(cert.Parsed.RawSubjectPublicKeyInfo)
+	return hex.EncodeToString(hash[:])
 }

@@ -50,6 +50,9 @@
                 {{if .ChainGraph.Legend.HasExpired}}
                 <span class="legend-item">⛔ Expired Certificate</span>
                 {{end}}
+                {{if .ChainGraph.Legend.CrossSignedMarkers}}
+                <span class="legend-item">{{.ChainGraph.Legend.CrossSignedMarkerKey}} Cross-signed Certificates</span>
+                {{end}}
             </div>
         </div>
 
