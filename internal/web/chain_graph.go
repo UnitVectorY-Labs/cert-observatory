@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 )
@@ -238,10 +239,7 @@ func assignCrossSignedMarkers(root *ChainGraphNode) []string {
 	}
 	sortCrossGroupsByFirstSeen(ordered)
 
-	markerCount := len(ordered)
-	if markerCount > len(crossSignedMarkers) {
-		markerCount = len(crossSignedMarkers)
-	}
+	markerCount := min(len(ordered), len(crossSignedMarkers))
 	usedMarkers := make([]string, 0, markerCount)
 	for i := 0; i < markerCount; i++ {
 		marker := crossSignedMarkers[i]
@@ -452,9 +450,7 @@ func (b *chainGraphBuilder) buildNode(cert *CertificateResult, visited map[strin
 		for _, issuer := range issuers {
 			// Clone visited set for each branch to allow divergent paths
 			branchVisited := make(map[string]bool, len(visited))
-			for k, v := range visited {
-				branchVisited[k] = v
-			}
+			maps.Copy(branchVisited, visited)
 			issuerNode := b.buildNode(issuer, branchVisited, depth+1)
 			if issuerNode != nil {
 				node.Issuers = append(node.Issuers, issuerNode)

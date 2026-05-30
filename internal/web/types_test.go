@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func generateTestCert(t *testing.T, pub interface{}, priv interface{}) *x509.Certificate {
+func generateTestCert(t *testing.T, pub any, priv any) *x509.Certificate {
 	t.Helper()
 
 	tmpl := &x509.Certificate{

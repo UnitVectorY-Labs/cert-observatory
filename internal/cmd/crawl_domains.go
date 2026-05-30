@@ -104,10 +104,7 @@ func CrawlDomains(ctx context.Context, cfg *CrawlDomainsConfig) error {
 	repo := db.NewRepository(database)
 
 	// Calculate effective age: (age_days * 24h) - 1h
-	effectiveAge := time.Duration(cfg.AgeDays*24)*time.Hour - 1*time.Hour
-	if effectiveAge < 0 {
-		effectiveAge = 0
-	}
+	effectiveAge := max(time.Duration(cfg.AgeDays*24)*time.Hour-1*time.Hour, 0)
 
 	logger.Debug("effective age threshold", "effective_age", effectiveAge.String())
 
