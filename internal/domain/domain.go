@@ -153,8 +153,8 @@ func NormalizeAndValidateTarget(input string, allowPort bool) (*Target, error) {
 	}
 
 	// Validate each label
-	labels := strings.Split(normalized, ".")
-	for _, label := range labels {
+	labels := strings.SplitSeq(normalized, ".")
+	for label := range labels {
 		if len(label) == 0 {
 			return nil, ErrDomainInvalidLabel
 		}

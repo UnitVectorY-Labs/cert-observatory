@@ -439,7 +439,7 @@ func TestRepository_SuccessAfterFailureResetsCounter(t *testing.T) {
 	domain := "recovers.example.com"
 
 	// Record some failures
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err := repo.RecordFailedCrawl(ctx, domain, time.Now(), db.CrawlModeStandard)
 		if err != nil {
 			t.Fatalf("RecordFailedCrawl failed: %v", err)

@@ -664,7 +664,7 @@ func generateLockID() string {
 	if _, err := rand.Read(b); err != nil {
 		// This should never happen with crypto/rand, but handle gracefully
 		// Use a timestamp-based fallback
-		b = []byte(fmt.Sprintf("%x", time.Now().UnixNano()))
+		b = fmt.Appendf(nil, "%x", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
 }

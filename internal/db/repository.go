@@ -360,7 +360,7 @@ func normalizePort(port int) int {
 }
 
 // nullableBytes returns nil if the slice is empty, otherwise returns the slice.
-func nullableBytes(b []byte) interface{} {
+func nullableBytes(b []byte) any {
 	if len(b) == 0 {
 		return nil
 	}

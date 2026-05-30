@@ -143,10 +143,7 @@ func IngestToplist(ctx context.Context, cfg *IngestToplistConfig) error {
 	totalUpdated := 0
 
 	for i := 0; i < len(validDomains); i += batchSize {
-		end := i + batchSize
-		if end > len(validDomains) {
-			end = len(validDomains)
-		}
+		end := min(i+batchSize, len(validDomains))
 		batch := validDomains[i:end]
 		batchNum := i/batchSize + 1
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/certutil"
@@ -435,16 +436,13 @@ func (r *Repository) CheckCertificatesExist(ctx context.Context, hashes [][]byte
 	// Check in batches of 100 using IN clause
 	batchSize := 100
 	for i := 0; i < len(hashes); i += batchSize {
-		end := i + batchSize
-		if end > len(hashes) {
-			end = len(hashes)
-		}
+		end := min(i+batchSize, len(hashes))
 
 		batch := hashes[i:end]
 
 		// Build query with placeholders for IN clause
 		placeholders := make([]string, len(batch))
-		args := make([]interface{}, len(batch))
+		args := make([]any, len(batch))
 		for j, hash := range batch {
 			placeholders[j] = fmt.Sprintf("$%d", j+1)
 			args[j] = hash
@@ -480,9 +478,10 @@ func joinStrings(parts []string, sep string) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	result := parts[0]
+	var result strings.Builder
+	result.WriteString(parts[0])
 	for i := 1; i < len(parts); i++ {
-		result += sep + parts[i]
+		result.WriteString(sep + parts[i])
 	}
-	return result
+	return result.String()
 }

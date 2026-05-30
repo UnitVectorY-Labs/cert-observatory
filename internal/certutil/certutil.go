@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"encoding/pem"
+	"strings"
 	"time"
 )
 
@@ -152,11 +153,11 @@ func ParseChain(certs []*x509.Certificate) *ChainInfo {
 
 // ChainToPEM returns the PEM-encoded representation of all certificates in the chain.
 func ChainToPEM(certs []*CertInfo) string {
-	var result string
+	var result strings.Builder
 	for _, cert := range certs {
-		result += cert.PEM()
+		result.WriteString(cert.PEM())
 	}
-	return result
+	return result.String()
 }
 
 // DERToPEM converts DER-encoded certificate bytes to PEM format.

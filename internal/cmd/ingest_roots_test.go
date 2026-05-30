@@ -18,7 +18,7 @@ func generateTestPEMBundle(t *testing.T, count int) []byte {
 	t.Helper()
 
 	var bundle []byte
-	for i := 0; i < count; i++ {
+	for i := range count {
 		cert := generateTestCert(t, fmt.Sprintf("test-cert-%d", i))
 		pemBlock := &pem.Block{
 			Type:  "CERTIFICATE",

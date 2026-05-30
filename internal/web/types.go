@@ -251,7 +251,7 @@ func formatAdvancedCertificate(cert *x509.Certificate) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func writeAdvancedLine(b *strings.Builder, indent int, format string, args ...interface{}) {
+func writeAdvancedLine(b *strings.Builder, indent int, format string, args ...any) {
 	b.WriteString(strings.Repeat("    ", indent))
 	fmt.Fprintf(b, format, args...)
 	b.WriteByte('\n')
@@ -263,10 +263,7 @@ func writeWrappedHex(b *strings.Builder, indent int, data []byte, perLine int) {
 		return
 	}
 	for start := 0; start < len(data); start += perLine {
-		end := start + perLine
-		if end > len(data) {
-			end = len(data)
-		}
+		end := min(start+perLine, len(data))
 		writeAdvancedLine(b, indent, "%s", formatHexBytes(data[start:end]))
 	}
 }
@@ -280,7 +277,7 @@ func writeAdvancedExtension(b *strings.Builder, ext pkix.Extension, cert *x509.C
 	writeAdvancedLine(b, 3, "%s%s:", name, critical)
 
 	if formatted, ok := formatKnownExtension(ext, cert); ok {
-		for _, line := range strings.Split(formatted, "\n") {
+		for line := range strings.SplitSeq(formatted, "\n") {
 			writeAdvancedLine(b, 4, "%s", line)
 		}
 		return
@@ -407,11 +404,11 @@ func formatSubjectAlternativeNames(cert *x509.Certificate) string {
 }
 
 func extractCN(dn string) string {
-	parts := strings.Split(dn, ",")
-	for _, part := range parts {
+	parts := strings.SplitSeq(dn, ",")
+	for part := range parts {
 		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, "CN=") {
-			return strings.TrimPrefix(part, "CN=")
+		if after, ok := strings.CutPrefix(part, "CN="); ok {
+			return after
 		}
 	}
 	return dn
