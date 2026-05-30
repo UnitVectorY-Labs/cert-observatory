@@ -475,14 +475,19 @@ function selectTrustPathCert(nodeId, certIdx) {
         activeEdges[j].classList.add("tp-active-edge");
     }
 
-    var chainSection = document.getElementById("chain-view-section");
-    if (chainSection) {
-        chainSection.style.display = "none";
+    var chainHeading = document.getElementById("chain-heading");
+    if (chainHeading) {
+        chainHeading.style.display = "none";
     }
 
     var selectedHeading = document.getElementById("selected-cert-heading");
     if (selectedHeading) {
         selectedHeading.style.display = "block";
+    }
+
+    var chainList = document.getElementById("certificate-chain-list");
+    if (chainList) {
+        chainList.style.display = "none";
     }
 
     var allPanes = document.querySelectorAll(".trust-path-cert-pane");
