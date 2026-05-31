@@ -120,8 +120,10 @@ type ResultsViewData struct {
 	ChainGraph *ChainGraphData
 	// IsManual indicates the result was produced from a manually uploaded PEM certificate.
 	IsManual bool
-	// DownloadURL is the server-side URL for downloading all graph certificates as a PEM bundle.
-	DownloadURL string
+	// ChainDownloadURL is the server-side URL for downloading only the presented certificate chain.
+	ChainDownloadURL string
+	// AllDownloadURL is the server-side URL for downloading all graph certificates as a PEM bundle.
+	AllDownloadURL string
 }
 
 // certToViewData converts a CertificateResult to CertViewData.

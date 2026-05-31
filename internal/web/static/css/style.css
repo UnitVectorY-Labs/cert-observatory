@@ -261,9 +261,6 @@
   .mt-0\.5 {
     margin-top: calc(var(--spacing) * 0.5);
   }
-  .mt-4 {
-    margin-top: calc(var(--spacing) * 4);
-  }
   .mb-3 {
     margin-bottom: calc(var(--spacing) * 3);
   }
@@ -2039,6 +2036,11 @@ a {
   justify-content: space-between;
   gap: calc(var(--spacing) * 3);
   padding-top: calc(var(--spacing) * 1);
+}
+.graph-download-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
 }
 .btn-graph-download {
   display: inline-flex;
