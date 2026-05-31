@@ -1427,6 +1427,55 @@ func TestHandleDownload_DomainWithChain(t *testing.T) {
 	}
 }
 
+func TestHandleDownload_DomainWithChainScope(t *testing.T) {
+	pemStr := "-----BEGIN CERTIFICATE-----\nchain\n-----END CERTIFICATE-----\n"
+	repo := &mockRepository{
+		domainResult: &DomainResult{
+			Domain:   "github.com",
+			HasChain: true,
+			Chain: []*CertificateResult{
+				{
+					CertHash:  make([]byte, 32),
+					PEM:       pemStr,
+					Subject:   "CN=github.com",
+					NotBefore: time.Now().Add(-24 * time.Hour),
+					NotAfter:  time.Now().Add(365 * 24 * time.Hour),
+				},
+			},
+		},
+	}
+	server, err := New(DefaultConfig(), repo, &mockCrawler{})
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/download?domain=github.com&scope=chain", nil)
+	w := httptest.NewRecorder()
+	server.handleDownload(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, "github.com-chain.pem") {
+		t.Errorf("expected filename github.com-chain.pem in Content-Disposition, got %s", cd)
+	}
+}
+
+func TestHandleDownload_InvalidScope(t *testing.T) {
+	server, err := New(DefaultConfig(), &mockRepository{}, &mockCrawler{})
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/download?domain=github.com&scope=invalid", nil)
+	w := httptest.NewRecorder()
+	server.handleDownload(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid scope, got %d", w.Code)
+	}
+}
+
 func TestHandleDownload_InvalidCertHash(t *testing.T) {
 	server, err := New(DefaultConfig(), &mockRepository{}, &mockCrawler{})
 	if err != nil {
@@ -1464,9 +1513,12 @@ func TestSanitizeDownloadFilename(t *testing.T) {
 }
 
 func TestBuildNormalDownloadURL(t *testing.T) {
-	url := buildNormalDownloadURL("github.com", 443, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: false})
+	url := buildNormalDownloadURL("github.com", 443, ChainGraphFilters{ShowNonChainCerts: true, ShowExpired: false}, "all")
 	if !strings.Contains(url, "domain=github.com") {
 		t.Errorf("expected domain param in URL, got %s", url)
+	}
+	if !strings.Contains(url, "scope=all") {
+		t.Errorf("expected scope param in URL, got %s", url)
 	}
 	if !strings.Contains(url, "showNonChainCerts=true") {
 		t.Errorf("expected showNonChainCerts param in URL, got %s", url)
@@ -1475,9 +1527,12 @@ func TestBuildNormalDownloadURL(t *testing.T) {
 		t.Errorf("expected no showExpired param when false, got %s", url)
 	}
 
-	url = buildNormalDownloadURL("github.com", 8443, ChainGraphFilters{})
+	url = buildNormalDownloadURL("github.com", 8443, ChainGraphFilters{}, "chain")
 	if !strings.Contains(url, "port=8443") {
 		t.Errorf("expected port param in URL, got %s", url)
+	}
+	if !strings.Contains(url, "scope=chain") {
+		t.Errorf("expected scope param in URL, got %s", url)
 	}
 }
 

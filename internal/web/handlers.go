@@ -172,7 +172,7 @@ func (s *Server) handleManualCert(w http.ResponseWriter, r *http.Request) {
 	// Pass all uploaded certs so they are all marked "in chain" in the Mermaid diagram,
 	// matching the grouping used when a server returns multiple certificates.
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, uploaded, filters)
-	data.DownloadURL = buildManualDownloadURL(hex.EncodeToString(uploaded[0].CertHash), filters)
+	data.AllDownloadURL = buildManualDownloadURL(hex.EncodeToString(uploaded[0].CertHash), filters)
 
 	s.renderManualResults(w, r, data)
 }
@@ -574,7 +574,8 @@ func (s *Server) renderCachedResults(w http.ResponseWriter, r *http.Request, res
 
 	// Build the chain graph from the chain certificates
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain, filters)
-	data.DownloadURL = buildNormalDownloadURL(result.Domain, result.Port, filters)
+	data.ChainDownloadURL = buildNormalDownloadURL(result.Domain, result.Port, filters, "chain")
+	data.AllDownloadURL = buildNormalDownloadURL(result.Domain, result.Port, filters, "all")
 
 	s.renderResults(w, r, data)
 }
@@ -601,7 +602,8 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 
 	// Build the chain graph from the chain certificates
 	data.ChainGraph = buildChainGraph(r.Context(), s.repo, result.Chain, filters)
-	data.DownloadURL = buildNormalDownloadURL(result.Domain, result.Port, filters)
+	data.ChainDownloadURL = buildNormalDownloadURL(result.Domain, result.Port, filters, "chain")
+	data.AllDownloadURL = buildNormalDownloadURL(result.Domain, result.Port, filters, "all")
 
 	s.renderResults(w, r, data)
 }
@@ -746,9 +748,12 @@ func formatDuration(d time.Duration) string {
 }
 
 // buildNormalDownloadURL constructs the server-side download URL for a domain.
-func buildNormalDownloadURL(domainName string, port int, filters ChainGraphFilters) string {
+func buildNormalDownloadURL(domainName string, port int, filters ChainGraphFilters, scope string) string {
 	params := url.Values{}
 	params.Set("domain", domainName)
+	if scope != "" {
+		params.Set("scope", scope)
+	}
 	if port != 0 && port != 443 {
 		params.Set("port", fmt.Sprintf("%d", port))
 	}
@@ -788,14 +793,23 @@ func sanitizeDownloadFilename(name string) string {
 	return result
 }
 
-// handleDownload serves a PEM bundle of all certificates in the trust path graph.
+// handleDownload serves a PEM bundle for the presented chain or all certificates in the trust path graph.
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	domainParam := r.URL.Query().Get("domain")
 	certHashHex := r.URL.Query().Get("cert")
+	scope := r.URL.Query().Get("scope")
+	if scope == "" {
+		scope = "all"
+	}
+	if scope != "chain" && scope != "all" {
+		http.Error(w, "Invalid download scope", http.StatusBadRequest)
+		return
+	}
 
 	var chainCerts []*CertificateResult
 	var filters ChainGraphFilters
 	var filenameBase string
+	var filenameSuffix string
 
 	if domainParam != "" {
 		target, err := domain.NormalizeAndValidateTarget(domainParam, false)
@@ -821,7 +835,12 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 			ShowExpired:       r.URL.Query().Get("showExpired") == "true",
 		}
 		filenameBase = formatTarget(target.Domain, target.Port)
+		filenameSuffix = "chain"
 	} else if certHashHex != "" {
+		if scope == "chain" {
+			http.Error(w, "Chain download is only available for domain results", http.StatusBadRequest)
+			return
+		}
 		hash, err := hex.DecodeString(certHashHex)
 		if err != nil || len(hash) != 32 {
 			http.Error(w, "Invalid cert hash", http.StatusBadRequest)
@@ -842,19 +861,31 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		if filenameBase == "" {
 			filenameBase = "certificate"
 		}
+		filenameSuffix = "certificates"
 	} else {
 		http.Error(w, "Missing domain or cert parameter", http.StatusBadRequest)
 		return
 	}
 
-	graph := buildChainGraph(r.Context(), s.repo, chainCerts, filters)
-	if graph == nil || len(graph.AllCerts) == 0 {
+	var downloadCerts []*CertViewData
+	if scope == "chain" {
+		for _, cert := range chainCerts {
+			downloadCerts = append(downloadCerts, certToViewData(cert))
+		}
+	} else {
+		graph := buildChainGraph(r.Context(), s.repo, chainCerts, filters)
+		if graph != nil {
+			downloadCerts = graph.AllCerts
+		}
+		filenameSuffix = "certificates"
+	}
+	if len(downloadCerts) == 0 {
 		http.Error(w, "No certificates found", http.StatusNotFound)
 		return
 	}
 
 	var buf strings.Builder
-	for _, cert := range graph.AllCerts {
+	for _, cert := range downloadCerts {
 		cn := cert.SubjectCN
 		if cn == "" {
 			cn = cert.SubjectDN
@@ -869,7 +900,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	safeBase := sanitizeDownloadFilename(filenameBase)
-	filename := safeBase + "-certificates.pem"
+	filename := safeBase + "-" + filenameSuffix + ".pem"
 
 	w.Header().Set("Content-Type", "application/x-pem-file")
 	// sanitizeDownloadFilename strips all characters that could break the quoted filename
