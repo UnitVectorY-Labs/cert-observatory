@@ -614,11 +614,79 @@ func TestBuildChainGraph_CrossSigning(t *testing.T) {
 	if len(graph.Legend.CrossSignedMarkers) != 1 {
 		t.Fatalf("expected one cross-signed marker in legend, got %d", len(graph.Legend.CrossSignedMarkers))
 	}
-	if graph.Legend.CrossSignedMarkers[0] != "🔴" {
-		t.Fatalf("expected first cross-signed marker to be red circle, got %q", graph.Legend.CrossSignedMarkers[0])
+	if graph.Legend.CrossSignedMarkers[0] != "🟣" {
+		t.Fatalf("expected first cross-signed marker to be purple circle, got %q", graph.Legend.CrossSignedMarkers[0])
 	}
-	if count := strings.Count(graph.MermaidDiagram, "🔴 Cross-Signed Inter"); count != 2 {
+	if count := strings.Count(graph.MermaidDiagram, "🟣 Cross-Signed Inter"); count != 2 {
 		t.Fatalf("expected both cross-signed intermediates to be marked, count=%d diagram=\n%s", count, graph.MermaidDiagram)
+	}
+}
+
+func TestBuildChainGraph_CrossSigningFirstMarkersUseDistinctShapes(t *testing.T) {
+	diagram, _, legend := buildMermaidDiagram(&ChainGraphNode{
+		HashHex:              "leaf",
+		SubjectCN:            "Leaf",
+		SubjectDN:            "CN=Leaf",
+		PublicKeySPKIHashHex: "leaf-key",
+		CertIndex:            0,
+		Issuers: []*ChainGraphNode{
+			{
+				HashHex:              "group-1-a",
+				SubjectCN:            "Cross Group 1",
+				SubjectDN:            "CN=Cross Group 1",
+				PublicKeySPKIHashHex: "group-1-key",
+				CertIndex:            1,
+			},
+			{
+				HashHex:              "group-1-b",
+				SubjectCN:            "Cross Group 1",
+				SubjectDN:            "CN=Cross Group 1",
+				PublicKeySPKIHashHex: "group-1-key",
+				CertIndex:            2,
+			},
+			{
+				HashHex:              "group-2-a",
+				SubjectCN:            "Cross Group 2",
+				SubjectDN:            "CN=Cross Group 2",
+				PublicKeySPKIHashHex: "group-2-key",
+				CertIndex:            3,
+			},
+			{
+				HashHex:              "group-2-b",
+				SubjectCN:            "Cross Group 2",
+				SubjectDN:            "CN=Cross Group 2",
+				PublicKeySPKIHashHex: "group-2-key",
+				CertIndex:            4,
+			},
+			{
+				HashHex:              "group-3-a",
+				SubjectCN:            "Cross Group 3",
+				SubjectDN:            "CN=Cross Group 3",
+				PublicKeySPKIHashHex: "group-3-key",
+				CertIndex:            5,
+			},
+			{
+				HashHex:              "group-3-b",
+				SubjectCN:            "Cross Group 3",
+				SubjectDN:            "CN=Cross Group 3",
+				PublicKeySPKIHashHex: "group-3-key",
+				CertIndex:            6,
+			},
+		},
+	})
+
+	expectedMarkers := []string{"🟣", "🟨", "♦"}
+	if strings.Join(legend.CrossSignedMarkers, " ") != strings.Join(expectedMarkers, " ") {
+		t.Fatalf("expected first cross-signed markers %v, got %v", expectedMarkers, legend.CrossSignedMarkers)
+	}
+	for _, expectedLabel := range []string{
+		"🟣 Cross Group 1",
+		"🟨 Cross Group 2",
+		"♦ Cross Group 3",
+	} {
+		if count := strings.Count(diagram, expectedLabel); count != 2 {
+			t.Fatalf("expected %q to mark both certificates, count=%d diagram=\n%s", expectedLabel, count, diagram)
+		}
 	}
 }
 
@@ -650,7 +718,7 @@ func TestBuildChainGraph_DoesNotMarkSameSubjectWithDifferentPublicKeysAsCrossSig
 	if len(legend.CrossSignedMarkers) != 0 {
 		t.Fatalf("did not expect cross-signed markers for different public keys, got %v", legend.CrossSignedMarkers)
 	}
-	if strings.Contains(diagram, "🔴 Same Subject Inter") {
+	if strings.Contains(diagram, "🟣 Same Subject Inter") {
 		t.Fatalf("did not expect same-subject certificates with different public keys to be marked:\n%s", diagram)
 	}
 }

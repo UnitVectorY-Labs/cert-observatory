@@ -205,8 +205,8 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 }
 
 var crossSignedMarkers = []string{
-	"🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤",
-	"🟥", "🟧", "🟨", "🟩", "🟦", "🟪", "🟫",
+	"🟣", "🟨", "♦", "🟥", "🟤", "●", "■",
+	"🔵", "🟩", "🔶", "🟦", "🟪", "🟫",
 }
 
 type crossGroup struct {
