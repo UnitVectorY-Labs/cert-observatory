@@ -8,7 +8,7 @@
             {{else if .IsCached}}
             <span class="status-chip status-cached">cached {{.CacheAge}}</span>
             {{else}}
-            <span class="status-chip status-fresh">fresh</span>
+            <span class="status-chip status-fresh">now</span>
             {{end}}
             {{if .LastCrawlFailed}}
             <span class="status-chip status-error">latest crawl failed</span>
