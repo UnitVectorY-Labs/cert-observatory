@@ -440,7 +440,7 @@ function setTrustPathNodeSelected(nodeEl, isSelected) {
     var shapes = nodeEl.querySelectorAll("rect, polygon, path, circle, ellipse");
     for (var i = 0; i < shapes.length; i++) {
         if (isSelected) {
-            shapes[i].style.setProperty("stroke-width", "5px", "important");
+            shapes[i].style.setProperty("stroke-width", "2.5px", "important");
         } else {
             shapes[i].style.removeProperty("stroke-width");
         }

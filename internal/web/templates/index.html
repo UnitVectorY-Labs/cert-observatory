@@ -13,7 +13,10 @@
         <div class="page-container">
             <div class="header-row">
                 <div>
-                    <h1 class="brand-title">🔐 Cert Observatory</h1>
+                    <h1 class="brand-title">
+                        <span class="brand-mark" aria-hidden="true">🔐</span>
+                        <span>Cert Observatory</span>
+                    </h1>
                     <p class="brand-subtitle">Retrieve and inspect TLS certificate chains for any domain.</p>
                 </div>
                 <div class="header-controls">
@@ -154,7 +157,15 @@
 
         <details class="settings-card" aria-labelledby="settings-title">
             <summary class="settings-summary">
-                <h2 id="settings-title" class="settings-title">Settings</h2>
+                <span class="settings-summary-content">
+                    <span class="settings-icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 6l8 0"/><path d="M16 6l4 0"/><path d="M8 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 12l2 0"/><path d="M10 12l10 0"/><path d="M17 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M4 18l11 0"/><path d="M19 18l1 0"/></svg>
+                    </span>
+                    <span>
+                        <span id="settings-title" class="settings-title">Settings</span>
+                        <span class="settings-summary-copy">Certificate display preferences</span>
+                    </span>
+                </span>
                 <svg class="settings-caret" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 9l6 6l6 -6" /></svg>
             </summary>
             <div class="settings-body">

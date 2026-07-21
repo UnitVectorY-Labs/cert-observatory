@@ -184,10 +184,10 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 	}
 
 	b.lines = append(b.lines,
-		"classDef leaf stroke-width:2px;",
-		"classDef intermediate stroke-width:2px;",
-		"classDef root stroke-width:2px;",
-		"classDef missing stroke-width:2px,stroke-dasharray:5 3;",
+		"classDef leaf stroke-width:1.5px;",
+		"classDef intermediate stroke-width:1.5px;",
+		"classDef root stroke-width:1.5px;",
+		"classDef missing stroke-width:1.5px,stroke-dasharray:5 3;",
 		"classDef interactive cursor:pointer;",
 	)
 
