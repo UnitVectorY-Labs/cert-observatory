@@ -48,6 +48,11 @@ func TestAssetURL(t *testing.T) {
 	if got != "/static/js/htmx.min.js?v=def456abc123" {
 		t.Fatalf("unexpected HTMX URL with version: %s", got)
 	}
+
+	got = assetURL("/static/js/unknown.js", versions)
+	if got != "/static/js/unknown.js" {
+		t.Fatalf("unexpected URL for unversioned asset: %s", got)
+	}
 }
 
 func TestEmbeddedHTMXVersion(t *testing.T) {
