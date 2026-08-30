@@ -179,6 +179,10 @@ func TestHandleIndex(t *testing.T) {
 	if !strings.Contains(body, "/static/js/script.js?v=") {
 		t.Error("Expected script URL to include cache-busting version")
 	}
+
+	if !strings.Contains(body, "/static/js/htmx.min.js?v=") {
+		t.Error("Expected HTMX URL to include cache-busting version")
+	}
 }
 
 func TestHandleIndex_InspectFormUsesDefaultEndpoint(t *testing.T) {

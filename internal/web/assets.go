@@ -12,6 +12,7 @@ const assetVersionLength = 12
 
 var versionedAssetPaths = []string{
 	"/static/css/style.css",
+	"/static/js/htmx.min.js",
 	"/static/js/script.js",
 }
 
