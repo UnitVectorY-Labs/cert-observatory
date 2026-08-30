@@ -11,10 +11,6 @@
     }
 })();
 
-window.htmx = window.htmx || {};
-window.htmx.config = window.htmx.config || {};
-window.htmx.config.allowEval = false;
-
 function updateThemeToggleLabel(isDark) {
     var btn = document.getElementById("theme-toggle");
     if (!btn) {
@@ -628,23 +624,17 @@ function initializePage() {
     }
     applyHexFormat(document);
 
-    document.addEventListener("htmx:beforeRequest", function (evt) {
-        if (evt.target && evt.target.id === "inspect-form") {
+    document.addEventListener("htmx:before:request", function (evt) {
+        if (evt.target && (evt.target.id === "inspect-form" || evt.target.id === "refresh-form")) {
             clearResults();
         }
     });
 
     if (document.body) {
-        document.body.addEventListener("htmx:beforeSwap", function (evt) {
-            if (evt.detail.xhr.status >= 400 && evt.detail.xhr.status < 600) {
-                evt.detail.shouldSwap = true;
-                evt.detail.isError = false;
-            }
-        });
-
-        document.body.addEventListener("htmx:afterSwap", function (evt) {
-            renderTrustPathMermaid(evt.target);
-            applyHexFormat(evt.target);
+        document.body.addEventListener("htmx:after:swap", function (evt) {
+            var swapTarget = evt.detail && evt.detail.ctx ? evt.detail.ctx.target : evt.target;
+            renderTrustPathMermaid(swapTarget);
+            applyHexFormat(swapTarget);
         });
     }
 
