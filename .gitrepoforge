@@ -1,0 +1,27 @@
+name: "cert-observatory"
+default_branch: "main"
+config:
+  description: "Fetches the TLS certificate chain presented by a domain and renders each certificate in an easy-to-inspect format with decoded details and raw PEM."
+  license: "MIT"
+  language: "go"
+  release: "docker-go"
+  release_github: false
+  status: "active"
+  justfile: true
+  codecov:
+    enabled: true
+  docs:
+    enabled: true
+  gitignore:
+    - ".env"
+    - "node_modules/"
+    - "package.json"
+    - "package-lock.json"
+  justfile_extra: |
+    set dotenv-load := true
+
+    tailwind:
+      tailwindcss -i ./internal/web/tailwind.css -o ./internal/web/static/css/style.css
+
+    serve:
+      go run . serve-web
