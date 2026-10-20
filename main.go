@@ -45,6 +45,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(migrateCmd())
 	root.AddCommand(ingestToplistCmd())
 	root.AddCommand(ingestRootsCmd())
+	root.AddCommand(ingestDistrustCmd())
 	root.AddCommand(addCertCmd())
 
 	return root
@@ -422,5 +423,52 @@ Certificates are inserted if not already present. The operation is idempotent.`,
 	c.Flags().StringVar(&cfg.DBConfig.Database, "db-name", "", "Database name (env: DB_NAME)")
 	c.Flags().StringVar(&cfg.DBConfig.SSLMode, "db-sslmode", "", "Database SSL mode (env: DB_SSLMODE)")
 
+	return c
+}
+
+func ingestDistrustCmd() *cobra.Command {
+	cfg := cmd.DefaultIngestDistrustConfig()
+	cfg.DBConfig = &db.Config{}
+	c := &cobra.Command{
+		Use:   "ingest-distrust",
+		Short: "Refresh explicit CA distrust rules from Mozilla OneCRL and CCADB",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, args []string) error {
+			if !c.Flags().Changed("source") {
+				if v := os.Getenv("CERT_OBS_DISTRUST_SOURCE"); v != "" {
+					cfg.Source = v
+				}
+			}
+			if !c.Flags().Changed("timeout") {
+				if v := os.Getenv("CERT_OBS_DISTRUST_TIMEOUT"); v != "" {
+					d, err := time.ParseDuration(v)
+					if err != nil {
+						return fmt.Errorf("CERT_OBS_DISTRUST_TIMEOUT: %w", err)
+					}
+					cfg.Timeout = d
+				}
+			}
+			if !c.Flags().Changed("verbose") {
+				if v := os.Getenv("CERT_OBS_DISTRUST_VERBOSE"); v != "" {
+					b, err := strconv.ParseBool(v)
+					if err != nil {
+						return fmt.Errorf("CERT_OBS_DISTRUST_VERBOSE: %w", err)
+					}
+					cfg.Verbose = b
+				}
+			}
+			applyDBEnvDefaults(cfg.DBConfig)
+			return cmd.IngestDistrust(c.Context(), cfg)
+		},
+	}
+	c.Flags().StringVar(&cfg.Source, "source", "all", "Source: all, mozilla_onecrl, ccadb (env: CERT_OBS_DISTRUST_SOURCE)")
+	c.Flags().DurationVar(&cfg.Timeout, "timeout", 120*time.Second, "Per-source HTTP timeout (env: CERT_OBS_DISTRUST_TIMEOUT)")
+	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable debug logging (env: CERT_OBS_DISTRUST_VERBOSE)")
+	c.Flags().StringVar(&cfg.DBConfig.Host, "db-host", "", "Database host (env: DB_HOST)")
+	c.Flags().IntVar(&cfg.DBConfig.Port, "db-port", 0, "Database port (env: DB_PORT)")
+	c.Flags().StringVar(&cfg.DBConfig.User, "db-user", "", "Database user (env: DB_USER)")
+	c.Flags().StringVar(&cfg.DBConfig.Password, "db-password", "", "Database password (env: DB_PASSWORD)")
+	c.Flags().StringVar(&cfg.DBConfig.Database, "db-name", "", "Database name (env: DB_NAME)")
+	c.Flags().StringVar(&cfg.DBConfig.SSLMode, "db-sslmode", "", "Database SSL mode (env: DB_SSLMODE)")
 	return c
 }

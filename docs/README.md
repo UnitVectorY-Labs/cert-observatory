@@ -13,6 +13,7 @@ Fetches the TLS certificate chain presented by a domain and renders each certifi
 
 - **[serve-web](SERVE-WEB.md)** - Serve the web application for browsing and inspecting certificate data
 - **[crawl-domain](CRAWL-DOMAIN.md)** - Manually crawl a single domain and store its certificate chain
+- **[ingest-distrust](INGEST-DISTRUST.md)** - Collect explicit CA platform distrust actions
 - **[migrate](MIGRATE.md)** - Apply database schema migrations
 
 ## Configuration

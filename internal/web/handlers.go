@@ -610,6 +610,7 @@ func (s *Server) renderFreshResults(w http.ResponseWriter, r *http.Request, resu
 
 // renderResults renders results, either as a fragment for HTMX or as a full page for regular requests.
 func (s *Server) renderResults(w http.ResponseWriter, r *http.Request, data *ResultsViewData) {
+	s.annotateDistrust(r.Context(), data)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// If HTMX request, render just the results fragment
@@ -631,6 +632,7 @@ func (s *Server) renderResults(w http.ResponseWriter, r *http.Request, data *Res
 
 // renderManualResults renders manual import results, keeping ManualMode=true for full-page responses.
 func (s *Server) renderManualResults(w http.ResponseWriter, r *http.Request, data *ResultsViewData) {
+	s.annotateDistrust(r.Context(), data)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// If HTMX request, render just the results fragment

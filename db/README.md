@@ -178,3 +178,11 @@ WHERE auto_crawl = true
 ORDER BY last_success_at NULLS FIRST
 LIMIT 100;
 ```
+## CA distrust evidence
+
+Migration 3 adds `certificate_distrust_rules` and `certificate_distrust_sources`.
+Rules preserve explicit source/platform actions and their matching identifiers
+without requiring a certificate catalog entry. Source state tracks freshness and
+failed refreshes. This is observational evidence, not general trust validation.
+See [the database documentation](../docs/DATABASE.md) for fields and
+[ingest-distrust](../docs/INGEST-DISTRUST.md) for collection and scheduling.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"github.com/UnitVectorY-Labs/cert-observatory/internal/distrust"
 	"html/template"
 	"io/fs"
 	"log/slog"
@@ -64,6 +65,7 @@ type Server struct {
 
 // Repository defines the database operations needed by the web server.
 type Repository interface {
+	DistrustSnapshot(context.Context) (*distrust.Snapshot, error)
 	// GetDomainWithChain retrieves a domain and its current chain with certificates.
 	GetDomainWithChain(ctx context.Context, domain string) (*DomainResult, error)
 	// GetDomainWithChainForPort retrieves a domain target and its current chain with certificates.

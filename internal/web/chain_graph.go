@@ -15,6 +15,7 @@ const maxGraphDepth = 10
 
 // ChainGraphNode represents a single certificate in the trust path tree.
 type ChainGraphNode struct {
+	HasDistrust bool
 	// HashHex is the hex-encoded SHA-256 hash of the certificate (empty if missing).
 	HashHex string
 	// SubjectCN is the common name extracted from the subject.
@@ -59,6 +60,7 @@ type ChainGraphData struct {
 
 // ChainGraphLegend indicates which node-type legend items are present in the graph.
 type ChainGraphLegend struct {
+	HasDistrust          bool
 	HasServerCertificate bool
 	HasIntermediateCA    bool
 	HasRootCA            bool
@@ -175,7 +177,7 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		)
 	}
 
-	for _, className := range []string{"leaf", "intermediate", "root", "missing", "interactive"} {
+	for _, className := range []string{"leaf", "intermediate", "root", "missing", "interactive", "distrust"} {
 		ids, ok := b.classMembers[className]
 		if !ok || len(ids) == 0 {
 			continue
@@ -189,6 +191,7 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		"classDef root stroke-width:1.5px;",
 		"classDef missing stroke-width:1.5px,stroke-dasharray:5 3;",
 		"classDef interactive cursor:pointer;",
+		"classDef distrust stroke-width:3px,stroke-dasharray:4 2;",
 	)
 
 	legend := ChainGraphLegend{
@@ -197,6 +200,7 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		HasRootCA:            len(b.classMembers["root"]) > 0,
 		HasMissing:           len(b.classMembers["missing"]) > 0,
 		HasExpired:           b.hasExpired,
+		HasDistrust:          len(b.classMembers["distrust"]) > 0,
 		CrossSignedMarkers:   b.crossMarkers,
 		CrossSignedMarkerKey: strings.Join(b.crossMarkers, " / "),
 	}
@@ -361,6 +365,10 @@ func (b *mermaidGraphBuilder) ensureNode(node *ChainGraphNode) string {
 	}
 	if label == "" {
 		label = "(unknown subject)"
+	}
+	if node.HasDistrust {
+		label = "⚠ " + label
+		b.addClassMember("distrust", nodeID)
 	}
 	if node.IsExpired {
 		label = "⛔ " + label
