@@ -257,7 +257,7 @@ CREATE INDEX IF NOT EXISTS idx_domain_chains_chain_hash
   ON domain_chains (chain_hash);
 
 
-CREATE TABLE certificate_distrust_sources (
+CREATE TABLE IF NOT EXISTS certificate_distrust_sources (
  source text PRIMARY KEY CHECK (source IN ('mozilla_onecrl','ccadb')),
  last_attempted_at timestamptz NOT NULL,
  last_successful_at timestamptz,
@@ -265,7 +265,7 @@ CREATE TABLE certificate_distrust_sources (
  last_error text NOT NULL DEFAULT ''
 );
 
-CREATE TABLE certificate_distrust_rules (
+CREATE TABLE IF NOT EXISTS certificate_distrust_rules (
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
  source text NOT NULL REFERENCES certificate_distrust_sources(source),
  source_record_id text NOT NULL CHECK (source_record_id <> ''),
@@ -291,7 +291,7 @@ CREATE TABLE certificate_distrust_rules (
   OR (match_type='subject_public_key_hash' AND subject_name_der IS NOT NULL AND octet_length(subject_name_der)>0 AND public_key_hash IS NOT NULL AND octet_length(public_key_hash)=32 AND certificate_sha256 IS NULL AND issuer_name_der IS NULL AND serial_number IS NULL)
  )
 );
-CREATE INDEX idx_certificate_distrust_active ON certificate_distrust_rules(source) WHERE withdrawn_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_certificate_distrust_active ON certificate_distrust_rules(source) WHERE withdrawn_at IS NULL;
 COMMENT ON TABLE certificate_distrust_rules IS 'Source-specific platform distrust evidence, independent of the observed certificate catalog. Absence is not proof of trust.';
 
 COMMIT;

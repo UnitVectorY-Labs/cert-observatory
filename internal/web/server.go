@@ -5,13 +5,14 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"github.com/UnitVectorY-Labs/cert-observatory/internal/distrust"
 	"html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/UnitVectorY-Labs/cert-observatory/internal/distrust"
 )
 
 //go:embed static/*
