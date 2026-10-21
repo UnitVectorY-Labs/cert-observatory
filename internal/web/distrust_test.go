@@ -42,7 +42,7 @@ func TestDistrustRendering(t *testing.T) {
 	out := httptest.NewRecorder()
 	server.renderResults(out, req, data)
 	body := out.Body.String()
-	for _, want := range []string{"Blocked by Mozilla", "CA platform distrust action", "Data is stale", "not collected", "Leaf certificates are not checked.", "&lt;script&gt;unsafe&lt;/script&gt;"} {
+	for _, want := range []string{"Distrusted by Mozilla", "Distrusted Certificate", "distrust-callout", "View OneCRL record", "Last confirmed in source:", "Data is stale", "not collected", "Leaf certificates are not checked.", "&lt;script&gt;unsafe&lt;/script&gt;"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}
@@ -50,8 +50,24 @@ func TestDistrustRendering(t *testing.T) {
 	if strings.Contains(body, "<script>unsafe") || strings.Contains(body, `href="javascript:`) {
 		t.Fatal("unescaped upstream data")
 	}
-	if !data.ChainGraph.Legend.HasDistrust || !strings.Contains(data.ChainGraph.MermaidDiagram, "⚠") {
+	if !data.ChainGraph.Legend.HasDistrust || !strings.Contains(data.ChainGraph.MermaidDiagram, "⚠ Distrusted") {
 		t.Fatal("graph lacks distrust marker")
+	}
+	// Render a stored numeric bug reference as a usable external link.
+	repo.distrustSnapshot.Rules[0].ReferenceURL = "2083382"
+	out = httptest.NewRecorder()
+	server.renderResults(out, req, data)
+	for _, want := range []string{`href="https://bugzilla.mozilla.org/show_bug.cgi?id=2083382"`, `href="` + distrust.OneCRLURL + `/blocked"`, "Related Mozilla issue", "May require access"} {
+		if !strings.Contains(out.Body.String(), want) {
+			t.Errorf("missing rendered reference %q", want)
+		}
+	}
+	// Expiration and distrust remain independent graph indicators.
+	data.ChainGraph.Root.IsExpired = true
+	server.annotateDistrust(context.Background(), data)
+	diagram := data.ChainGraph.MermaidDiagram
+	if !strings.Contains(diagram, "⛔ ⚠ Distrusted") || !data.ChainGraph.Legend.HasExpired || !data.ChainGraph.Legend.HasDistrust {
+		t.Fatal("expiration and distrust indicators must coexist")
 	}
 	// A newly withdrawn rule clears the marker without changing/re-crawling the chain.
 	repo.distrustSnapshot.Rules[0].WithdrawnAt = &now
@@ -64,5 +80,29 @@ func TestDistrustRendering(t *testing.T) {
 	server.annotateDistrust(context.Background(), data)
 	if len(data.DistrustSources) != 1 || !strings.Contains(data.DistrustSources[0], "unavailable") {
 		t.Fatal("missing unknown state")
+	}
+}
+
+func TestDistrustReferenceLinks(t *testing.T) {
+	for _, tc := range []struct{ name, source, reference, want string }{
+		{"numeric bug", distrust.OneCRL, " 2083382 ", "https://bugzilla.mozilla.org/show_bug.cgi?id=2083382"},
+		{"issue URL", distrust.OneCRL, "https://bugzilla.mozilla.org/show_bug.cgi?id=2083382", "https://bugzilla.mozilla.org/show_bug.cgi?id=2083382"},
+		{"empty", distrust.OneCRL, "", ""},
+		{"unsafe", distrust.OneCRL, "javascript:alert(1)", ""},
+		{"relative", distrust.OneCRL, "/2083382", ""},
+		{"invalid URL", distrust.OneCRL, "https://%", ""},
+		{"credentials", distrust.OneCRL, "https://user:password@example.com", ""},
+		{"ccadb numeric", distrust.CCADB, "123", ""},
+		{"ccadb source", distrust.CCADB, "https://www.ccadb.org/resources", "https://www.ccadb.org/resources"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := distrustReferenceURL(distrust.Rule{Source: tc.source, ReferenceURL: tc.reference})
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+	if got := oneCRLRecordURL(distrust.Rule{SourceRecordID: "example/id"}); got != distrust.OneCRLURL+"/example%2Fid" {
+		t.Fatal(got)
 	}
 }

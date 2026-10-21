@@ -56,7 +56,7 @@
                 <span class="legend-item"><span class="legend-swatch legend-missing"></span> Missing</span>
                 {{end}}
                 {{if .ChainGraph.Legend.HasDistrust}}
-                <span class="legend-item">⚠ CA platform distrust action (see certificate details)</span>
+                <span class="legend-item"><span class="legend-swatch legend-distrust"></span> ⚠ Distrusted Certificate</span>
                 {{end}}
                 {{if .ChainGraph.Legend.HasExpired}}
                 <span class="legend-item">⛔ Expired Certificate</span>
@@ -212,15 +212,17 @@
 {{define "cert-overview-details"}}
 <div class="details-stack">
     {{if .DistrustRules}}
-    <section class="cert-detail-section" aria-label="CA platform distrust actions">
-        <h4 class="detail-section-title">CA Platform Distrust Actions</h4>
+    <section class="distrust-callout" aria-label="CA certificate distrust">
         {{range .DistrustRules}}
         <div class="detail-item">
-            <div class="detail-value detail-expired">⚠ {{.Label}}</div>
-            <div class="detail-muted">Source: {{.SourceLabel}} · Last observed: {{.LastSeenAt.UTC.Format "2006-01-02 15:04 UTC"}}</div>
-            {{if .Reason}}<div class="detail-box">{{.Reason}}</div>{{end}}
-            {{if .EffectiveAt}}<div class="detail-muted">Effective: {{.EffectiveAt.UTC.Format "2006-01-02 15:04 UTC"}}</div>{{end}}
-            {{if .ReferenceURL}}<a class="detail-muted" href="{{.ReferenceURL}}" target="_blank" rel="noopener noreferrer">Source reference</a>{{end}}
+            <h4 class="distrust-heading">{{template "distrust-icon"}} {{distrustTitle .}}</h4>
+            {{if eq .Source "mozilla_onecrl"}}<p class="distrust-copy">This CA certificate is listed in Mozilla’s blocklist (OneCRL).</p>
+            <a class="distrust-link" href="{{oneCRLRecordURL .}}" target="_blank" rel="noopener noreferrer">View OneCRL record ↗</a>
+            {{else}}<p class="distrust-copy">This root-store action is reported by {{.SourceLabel}}.</p>{{end}}
+            {{if .Reason}}<div class="distrust-copy">{{.Reason}}</div>{{end}}
+            {{if .EffectiveAt}}<div class="distrust-meta">Effective: {{.EffectiveAt.UTC.Format "2 Jan 2006, 15:04 UTC"}}</div>{{end}}
+            {{if distrustReferenceURL .}}<a class="distrust-link" href="{{distrustReferenceURL .}}" target="_blank" rel="noopener noreferrer">{{if eq .Source "mozilla_onecrl"}}Related Mozilla issue ↗</a><span class="distrust-meta">May require access</span>{{else}}CCADB source information ↗</a>{{end}}{{end}}
+            <div class="distrust-meta">Last confirmed in source: {{.LastSeenAt.UTC.Format "2 Jan 2006, 15:04 UTC"}}</div>
         </div>
         {{end}}
     </section>
@@ -521,3 +523,5 @@
     </section>
 </div>
 {{end}}
+
+{{define "distrust-icon"}}<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 14.05a1.914 1.914 0 0 0 1.636 2.859h16.214a1.914 1.914 0 0 0 1.636 -2.859l-8.106 -14.05a1.914 1.914 0 0 0 -3.274 0z"/><path d="M12 16h.01"/></svg>{{end}}
