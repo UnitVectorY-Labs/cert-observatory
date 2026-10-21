@@ -10,6 +10,7 @@
   --mermaid-label: #0f172a;
   --mermaid-edge: #64748b;
   --mermaid-active: #0f172a;
+  --mermaid-distrust: #b45309;
   --mermaid-leaf-fill: #ffedd5;
   --mermaid-leaf-stroke: #f97316;
   --mermaid-intermediate-fill: #e0f2fe;
@@ -25,6 +26,7 @@
   --mermaid-label: #f8fafc;
   --mermaid-edge: #475569;
   --mermaid-active: #f8fafc;
+  --mermaid-distrust: #fbbf24;
   --mermaid-leaf-fill: #7c2d12;
   --mermaid-leaf-stroke: #fb923c;
   --mermaid-intermediate-fill: #0c4a6e;
@@ -737,4 +739,44 @@ a {
   .trust-path-mermaid .node .label {
     font-size: 0.75rem;
   }
+}
+
+/* Preserve certificate-role fills; distrust overrides even selected-node outlines. */
+.trust-path-mermaid .node.distrust rect,
+.trust-path-mermaid .node.distrust polygon,
+.trust-path-mermaid .node.distrust path {
+  stroke: var(--mermaid-distrust) !important;
+  stroke-width: 3px !important;
+  stroke-dasharray: none !important;
+}
+
+.legend-distrust {
+  border: 3px solid var(--mermaid-distrust);
+  background: transparent;
+}
+
+.distrust-callout {
+  @apply rounded-lg border border-amber-500 bg-amber-50 p-4 text-amber-950;
+  @apply dark:border-amber-400 dark:bg-amber-950/40 dark:text-amber-100;
+}
+
+.distrust-heading {
+  @apply flex items-center gap-2 text-sm font-semibold;
+}
+
+.distrust-heading svg {
+  @apply h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400;
+}
+
+.distrust-copy {
+  @apply mt-2 text-sm;
+}
+
+.distrust-meta {
+  @apply mt-2 text-xs text-amber-800 dark:text-amber-200;
+}
+
+.distrust-link {
+  @apply inline-block mt-2 mr-3 text-sm font-medium underline underline-offset-2;
+  @apply hover:text-amber-700 dark:hover:text-amber-300;
 }

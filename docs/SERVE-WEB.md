@@ -102,8 +102,16 @@ The web server includes security hardening:
 ## CA platform distrust warnings
 
 Run [ingest-distrust](INGEST-DISTRUST.md) on a schedule to populate platform distrust
-evidence. Results display CA warnings in the graph and certificate overview, along
-with feed freshness. The web server reads stored rules without contacting upstream
+evidence. Distrusted CA nodes retain their certificate-role fill colors and display
+an amber outline with a “⚠ Distrusted” label. The outline remains amber when the
+node is selected; ⛔ continues to indicate expiration independently. A matching
+legend entry and amber certificate overview callout identify the warning.
+
+Mozilla warnings link to the public OneCRL record and, when provided, the related
+Mozilla issue (which may require access). Numeric bug references are expanded into
+Bugzilla URLs; invalid links are omitted. CCADB warnings retain the specific
+blocked, disabled, or removed action and link to CCADB source information.
+Feed freshness is displayed separately. The web server reads stored rules without contacting upstream
 services. Missing or stale feeds are identified; absence of a warning does not mean
 a certificate is trusted or unrevoked. Leaf certificates are outside this feature's
 scope.

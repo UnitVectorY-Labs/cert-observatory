@@ -191,7 +191,7 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		"classDef root stroke-width:1.5px;",
 		"classDef missing stroke-width:1.5px,stroke-dasharray:5 3;",
 		"classDef interactive cursor:pointer;",
-		"classDef distrust stroke-width:3px,stroke-dasharray:4 2;",
+		"classDef distrust stroke-width:3px;",
 	)
 
 	legend := ChainGraphLegend{
@@ -367,7 +367,7 @@ func (b *mermaidGraphBuilder) ensureNode(node *ChainGraphNode) string {
 		label = "(unknown subject)"
 	}
 	if node.HasDistrust {
-		label = "⚠ " + label
+		label = "⚠ Distrusted · " + label
 		b.addClassMember("distrust", nodeID)
 	}
 	if node.IsExpired {

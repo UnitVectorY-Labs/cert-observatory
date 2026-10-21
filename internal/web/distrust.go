@@ -5,6 +5,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/distrust"
@@ -66,4 +68,31 @@ func (s *Server) annotateDistrust(ctx context.Context, data *ResultsViewData) {
 		}
 		graph.MermaidDiagram, graph.MermaidNodeToCertIndex, graph.Legend = buildMermaidDiagram(graph.Root)
 	}
+}
+
+// These helpers also handle references already stored before this UI update.
+func distrustTitle(rule distrust.Rule) string {
+	if rule.Source == distrust.OneCRL {
+		return "Distrusted by Mozilla"
+	}
+	return rule.Label()
+}
+
+func oneCRLRecordURL(rule distrust.Rule) string {
+	return distrust.OneCRLURL + "/" + url.PathEscape(rule.SourceRecordID)
+}
+
+func distrustReferenceURL(rule distrust.Rule) string {
+	reference := strings.TrimSpace(rule.ReferenceURL)
+	if reference == "" {
+		return ""
+	}
+	if rule.Source == distrust.OneCRL && strings.Trim(reference, "0123456789") == "" {
+		return "https://bugzilla.mozilla.org/show_bug.cgi?id=" + reference
+	}
+	parsed, err := url.Parse(reference)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil {
+		return ""
+	}
+	return reference
 }
