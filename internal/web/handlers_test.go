@@ -17,10 +17,13 @@ import (
 	"time"
 
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/certutil"
+	"github.com/UnitVectorY-Labs/cert-observatory/internal/distrust"
 )
 
 // mockRepository implements the Repository interface for testing.
 type mockRepository struct {
+	distrustSnapshot   *distrust.Snapshot
+	distrustError      error
 	domainResult       *DomainResult
 	certificateResult  *CertificateResult
 	storedCertificates map[string]*CertificateResult
@@ -1780,4 +1783,14 @@ func TestHandleManualCert_UnrelatedTrustedCertsAccepted(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "manual import") {
 		t.Errorf("expected 'manual import' status chip in results, got: %s", w.Body.String())
 	}
+}
+
+func (m *mockRepository) DistrustSnapshot(context.Context) (*distrust.Snapshot, error) {
+	if m.distrustError != nil {
+		return nil, m.distrustError
+	}
+	if m.distrustSnapshot != nil {
+		return m.distrustSnapshot, nil
+	}
+	return &distrust.Snapshot{}, nil
 }

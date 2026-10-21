@@ -98,3 +98,12 @@ The web server includes security hardening:
 |------|---------|
 | 0 | Server shut down gracefully |
 | Non-zero | Error (database connection failed, port in use, etc.) |
+
+## CA platform distrust warnings
+
+Run [ingest-distrust](INGEST-DISTRUST.md) on a schedule to populate platform distrust
+evidence. Results display CA warnings in the graph and certificate overview, along
+with feed freshness. The web server reads stored rules without contacting upstream
+services. Missing or stale feeds are identified; absence of a warning does not mean
+a certificate is trusted or unrevoked. Leaf certificates are outside this feature's
+scope.

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/UnitVectorY-Labs/cert-observatory/internal/certutil"
+	"github.com/UnitVectorY-Labs/cert-observatory/internal/distrust"
 )
 
 // DomainResult represents domain data from the database.
@@ -58,6 +59,7 @@ type CrawlResultInput struct {
 
 // CertViewData is the view model for certificate display.
 type CertViewData struct {
+	DistrustRules         []distrust.Rule
 	HashHex               string
 	Position              int
 	PEM                   string
@@ -107,6 +109,7 @@ type CertViewData struct {
 
 // ResultsViewData is the view model for the results template.
 type ResultsViewData struct {
+	DistrustSources    []string
 	Domain             string
 	Port               int
 	DisplayTarget      string

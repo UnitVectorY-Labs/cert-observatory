@@ -26,6 +26,14 @@
         {{end}}
     </div>
 
+    {{if .DistrustSources}}
+    <div class="section-card">
+        <h3 class="section-title">CA Distrust Data</h3>
+        {{range .DistrustSources}}<p class="section-copy">{{.}}</p>{{end}}
+        <p class="section-copy">Warnings report platform actions on CA certificates. Absence of a warning does not establish trust or revocation status. Leaf certificates are not checked.</p>
+    </div>
+    {{end}}
+
     {{if .ChainGraph}}
     <div class="section-card">
         <div>
@@ -46,6 +54,9 @@
                 {{end}}
                 {{if .ChainGraph.Legend.HasMissing}}
                 <span class="legend-item"><span class="legend-swatch legend-missing"></span> Missing</span>
+                {{end}}
+                {{if .ChainGraph.Legend.HasDistrust}}
+                <span class="legend-item">⚠ CA platform distrust action (see certificate details)</span>
                 {{end}}
                 {{if .ChainGraph.Legend.HasExpired}}
                 <span class="legend-item">⛔ Expired Certificate</span>
@@ -200,6 +211,20 @@
 
 {{define "cert-overview-details"}}
 <div class="details-stack">
+    {{if .DistrustRules}}
+    <section class="cert-detail-section" aria-label="CA platform distrust actions">
+        <h4 class="detail-section-title">CA Platform Distrust Actions</h4>
+        {{range .DistrustRules}}
+        <div class="detail-item">
+            <div class="detail-value detail-expired">⚠ {{.Label}}</div>
+            <div class="detail-muted">Source: {{.SourceLabel}} · Last observed: {{.LastSeenAt.UTC.Format "2006-01-02 15:04 UTC"}}</div>
+            {{if .Reason}}<div class="detail-box">{{.Reason}}</div>{{end}}
+            {{if .EffectiveAt}}<div class="detail-muted">Effective: {{.EffectiveAt.UTC.Format "2006-01-02 15:04 UTC"}}</div>{{end}}
+            {{if .ReferenceURL}}<a class="detail-muted" href="{{.ReferenceURL}}" target="_blank" rel="noopener noreferrer">Source reference</a>{{end}}
+        </div>
+        {{end}}
+    </section>
+    {{end}}
     {{if or .SubjectDN .IssuerDN .SANs}}
     <section class="cert-detail-section">
         <h4 class="detail-section-title">Identity</h4>

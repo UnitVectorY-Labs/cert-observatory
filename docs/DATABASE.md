@@ -87,6 +87,49 @@ One row per unique chain ever observed for a domain and port. No duplicates on o
 | `seen_count` | bigint | Total number of successful observations |
 | `last_mode` | crawl_mode | How the most recent observation was triggered |
 
+### certificate_distrust_rules
+
+Independent CA platform distrust evidence; no foreign key to the observed certificate
+catalog. Added in migration 3. A rule is unique by `(source, source_record_id, platform)`.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | bigint identity (PK) | Internal identifier |
+| `source` | text (FK) | `mozilla_onecrl` or `ccadb` |
+| `source_record_id` | text | Upstream record identifier |
+| `platform` | text | `mozilla`, `apple`, `chrome`, or `microsoft` |
+| `status` | text | `blocked`, `disabled`, or `removed` |
+| `match_type` | text | `certificate_sha256`, `issuer_serial`, or `subject_public_key_hash` |
+| `certificate_sha256` | bytea, nullable | Exact certificate SHA-256 fingerprint |
+| `issuer_name_der` | bytea, nullable | Encoded issuer distinguished name |
+| `serial_number` | bytea, nullable | Unsigned big-endian serial number |
+| `subject_name_der` | bytea, nullable | Encoded subject distinguished name |
+| `public_key_hash` | bytea, nullable | SHA-256 of full DER SubjectPublicKeyInfo for OneCRL |
+| `reason` | text | Source explanation, empty when unavailable |
+| `reference_url` | text | Source/incident reference, empty when unavailable |
+| `effective_at` | timestamptz, nullable | Effective date, if supplied |
+| `first_seen_at` | timestamptz | First accepted observation |
+| `last_seen_at` | timestamptz | Latest accepted observation |
+| `withdrawn_at` | timestamptz, nullable | Source no longer publishes/enables this rule |
+
+Constraints enforce exclusive matching fields and 32-byte hashes. A partial index
+covers active rules. An absent rule never establishes trust or non-revocation.
+
+### certificate_distrust_sources
+
+| Column | Type | Description |
+|---|---|---|
+| `source` | text (PK) | Feed identifier |
+| `last_attempted_at` | timestamptz | Latest recorded attempt |
+| `last_successful_at` | timestamptz, nullable | Latest accepted complete snapshot |
+| `active_rules` | integer | Active rules from the last accepted snapshot |
+| `last_error` | text | Latest fetch/validation error, cleared on success |
+
+See [ingest-distrust](INGEST-DISTRUST.md) for collection, atomic refresh behavior,
+staleness, and coverage limitations. Only explicit platform actions are collected;
+this does not add general trust/path validation.
+
+
 ## Types
 
 ### crawl_mode

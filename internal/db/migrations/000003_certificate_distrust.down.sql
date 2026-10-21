@@ -1,0 +1,2 @@
+DROP TABLE certificate_distrust_rules;
+DROP TABLE certificate_distrust_sources;
