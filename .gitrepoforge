@@ -25,3 +25,4 @@ config:
 
     serve:
       go run . serve-web
+  osv: sarif
