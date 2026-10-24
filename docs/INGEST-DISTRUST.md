@@ -115,9 +115,8 @@ and rule counts can change.
   available reference/reason. Alternative paths remain visible.
 - Current stored evidence is applied to cached chains, fresh crawls, and manual
   certificate inspection. A new rule can flag an existing chain without recrawling.
-- The page shows each source's last successful refresh. OneCRL becomes stale after
-  two hours; CCADB after 48 hours. A failed refresh also marks data stale. Previously
-  accepted blocks remain visible. Missing/unavailable data is labeled unknown.
+- Source refresh status is not displayed in search results. Previously accepted
+  blocks remain visible even when a source refresh fails or data becomes stale.
 - Warnings are applied only to certificates with CA basic constraints. Leaf
   certificates are not checked, even if a feed contains an exceptional leaf block.
 - No issuer CRL downloads, OCSP checks, Chrome CRLSet ingestion, general trust

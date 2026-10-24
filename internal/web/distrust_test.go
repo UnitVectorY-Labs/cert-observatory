@@ -42,7 +42,7 @@ func TestDistrustRendering(t *testing.T) {
 	out := httptest.NewRecorder()
 	server.renderResults(out, req, data)
 	body := out.Body.String()
-	for _, want := range []string{"Distrusted by Mozilla", "Distrusted Certificate", "distrust-callout", "View OneCRL record", "Last confirmed in source:", "Data is stale", "not collected", "Leaf certificates are not checked.", "&lt;script&gt;unsafe&lt;/script&gt;"} {
+	for _, want := range []string{"Distrusted by Mozilla", "Distrusted Certificate", "distrust-callout", "View OneCRL record", "Last confirmed in source:", "&lt;script&gt;unsafe&lt;/script&gt;"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

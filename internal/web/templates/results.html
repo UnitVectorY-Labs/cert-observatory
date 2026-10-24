@@ -26,14 +26,6 @@
         {{end}}
     </div>
 
-    {{if .DistrustSources}}
-    <div class="section-card">
-        <h3 class="section-title">CA Distrust Data</h3>
-        {{range .DistrustSources}}<p class="section-copy">{{.}}</p>{{end}}
-        <p class="section-copy">Warnings report platform actions on CA certificates. Absence of a warning does not establish trust or revocation status. Leaf certificates are not checked.</p>
-    </div>
-    {{end}}
-
     {{if .ChainGraph}}
     <div class="section-card">
         <div>
