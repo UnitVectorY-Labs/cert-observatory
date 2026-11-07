@@ -1,6 +1,6 @@
 # UVY Design adoption
 
-Approved source: [UVY Design v0.1.0](https://github.com/UnitVectorY-Labs/uvy-design/releases/tag/v0.1.0), commit `396a65021c2bcab8dbcb3d1bb4cb498c807a4396`.
+Approved source: [UVY Design v0.1.0](https://github.com/UnitVectorY-Labs/uvy-design/tree/12f8e3d964785d78628346516351fe4dac583cef), commit `12f8e3d964785d78628346516351fe4dac583cef`.
 
 ## Shared assets
 
