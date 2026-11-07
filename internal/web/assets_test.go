@@ -8,9 +8,13 @@ import (
 
 func TestBuildAssetVersions(t *testing.T) {
 	staticFiles := fstest.MapFS{
-		"static/css/style.css":  {Data: []byte("body { color: red; }")},
-		"static/js/htmx.min.js": {Data: []byte("htmx 4")},
-		"static/js/script.js":   {Data: []byte("console.log('hello')")},
+		"static/css/style.css":                      {Data: []byte("body { color: red; }")},
+		"static/js/htmx.min.js":                     {Data: []byte("htmx 4")},
+		"static/js/script.js":                       {Data: []byte("console.log('hello')")},
+		"static/js/mermaid-11.12.2.min.js":          {Data: []byte("mermaid")},
+		"static/vendor/uvy-design/uvy-tokens.css":   {Data: []byte("tokens")},
+		"static/vendor/uvy-design/uvy-elements.css": {Data: []byte("elements")},
+		"static/vendor/uvy-design/uvy-theme.js":     {Data: []byte("theme")},
 	}
 
 	versions, err := buildAssetVersions(staticFiles, versionedAssetPaths)
