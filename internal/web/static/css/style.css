@@ -2675,8 +2675,9 @@ body {
 .brand-title {
   color: var(--uvy-on-masthead);
   margin: 0;
-  font-size: 26px;
-  line-height: 1.25;
+  font-size: 2rem;
+  line-height: 1.2;
+  font-weight: 600;
 }
 .brand-mark {
   width: 28px;
@@ -2704,8 +2705,9 @@ body {
   color: var(--uvy-text);
 }
 .panel-title, .section-title, .chain-heading {
-  font-size: 18px;
-  line-height: 1.35;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 600;
 }
 .info-list, .option-row, .settings-item-copy, .settings-summary-copy, .section-copy, .cached-note, .detail-muted {
   color: var(--uvy-muted);
@@ -2858,7 +2860,6 @@ body {
 @media (max-width: 639px) {
   .brand-title {
     gap: 8px;
-    font-size: 22px;
   }
   .brand-mark {
     width: 24px;

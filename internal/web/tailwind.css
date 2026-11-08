@@ -786,7 +786,7 @@ a {
 body { min-height: 100dvh; background: var(--uvy-page); color: var(--uvy-text); font-family: var(--uvy-font); }
 .app-header { background: var(--uvy-masthead); border: 0; border-bottom: 4px solid var(--uvy-accent-fill); }
 .header-row { padding-block: 16px; }
-.brand-title { color: var(--uvy-on-masthead); margin: 0; font-size: 26px; line-height: 1.25; }
+.brand-title { color: var(--uvy-on-masthead); margin: 0; font-size: 2rem; line-height: 1.2; font-weight: 600; }
 .brand-mark { width: 28px; height: 28px; }
 .brand-mark svg { width: 28px; height: 28px; }
 .uvy-theme-toggle svg { width: 20px; height: 20px; }
@@ -795,7 +795,7 @@ body { min-height: 100dvh; background: var(--uvy-page); color: var(--uvy-text); 
 }
 .panel, .panel-accent, .section-card { padding: var(--uvy-panel-pad); }
 .panel-title, .info-title, .section-title, .chain-heading, .settings-title, .settings-item-title { color: var(--uvy-text); }
-.panel-title, .section-title, .chain-heading { font-size: 18px; line-height: 1.35; }
+.panel-title, .section-title, .chain-heading { font-size: 1.5rem; line-height: 1.2; font-weight: 600; }
 .info-list, .option-row, .settings-item-copy, .settings-summary-copy, .section-copy, .cached-note, .detail-muted { color: var(--uvy-muted); }
 .option-row, .settings-item-copy, .settings-intro, .section-copy { font-size: 13px; line-height: 1.4; }
 .domain-form { align-items: flex-start; }
@@ -828,7 +828,7 @@ body { min-height: 100dvh; background: var(--uvy-page); color: var(--uvy-text); 
 .link-accent, .ca-issuers-link { color: var(--uvy-link); }
 .footer-shell { margin-top: auto; padding-block: 20px; border-color: var(--uvy-divider); background: var(--uvy-surface); color: var(--uvy-muted); font-size: 13px; line-height: 1.5; }
 @media (max-width: 639px) {
-  .brand-title { gap: 8px; font-size: 22px; }
+  .brand-title { gap: 8px; }
   .brand-mark { width: 24px; height: 24px; }
   .brand-mark svg { width: 24px; height: 24px; }
   .header-row { gap: 12px; padding-block: 12px; }
