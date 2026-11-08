@@ -2667,9 +2667,16 @@ body {
   font-family: var(--uvy-font);
 }
 .app-header {
-  background: var(--uvy-masthead);
+  background: #174b93;
   border: 0;
-  border-bottom: 4px solid var(--uvy-accent-fill);
+}
+.header-row > div:first-child::after {
+  content: "";
+  display: block;
+  width: 48px;
+  height: 3px;
+  margin-top: 6px;
+  background: #ff932e;
 }
 .header-row {
   padding-block: 16px;

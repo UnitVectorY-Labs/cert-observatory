@@ -850,7 +850,8 @@ a {
 [data-theme="dark"] .uvy-theme-light-icon { display: inline-flex; }
 [hidden] { display: none !important; }
 body { min-height: 100dvh; background: var(--uvy-page); color: var(--uvy-text); font-family: var(--uvy-font); }
-.app-header { background: var(--uvy-masthead); border: 0; border-bottom: 4px solid var(--uvy-accent-fill); }
+.app-header { background: #174b93; border: 0; }
+.header-row > div:first-child::after { content: ""; display: block; width: 48px; height: 3px; margin-top: 6px; background: #ff932e; }
 .header-row { padding-block: 16px; }
 .brand-title { color: var(--uvy-on-masthead); margin: 0; font-size: 2rem; line-height: 1.2; font-weight: 600; }
 .brand-mark { width: 28px; height: 28px; }
