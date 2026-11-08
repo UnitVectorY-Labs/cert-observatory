@@ -243,6 +243,8 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 		scriptSrc := []string{
 			"'self'",
 			"'unsafe-inline'",
+			"https://cdn.jsdelivr.net",
+			"https://static.cloudflareinsights.com",
 		}
 
 		cspDirectives := []string{

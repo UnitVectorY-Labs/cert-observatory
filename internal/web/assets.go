@@ -14,10 +14,6 @@ var versionedAssetPaths = []string{
 	"/static/css/style.css",
 	"/static/js/htmx.min.js",
 	"/static/js/script.js",
-	"/static/js/mermaid-11.12.2.min.js",
-	"/static/vendor/uvy-design/uvy-tokens.css",
-	"/static/vendor/uvy-design/uvy-elements.css",
-	"/static/vendor/uvy-design/uvy-theme.js",
 }
 
 func buildAssetVersions(staticFiles fs.FS, assetPaths []string) (map[string]string, error) {

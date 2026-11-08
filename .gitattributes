@@ -1,3 +1,0 @@
-
-# Keep the pinned upstream bundle byte-for-byte (including template-string whitespace).
-internal/web/static/js/mermaid-11.12.2.min.js -whitespace linguist-vendored
