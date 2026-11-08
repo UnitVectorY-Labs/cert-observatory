@@ -2746,6 +2746,20 @@ body {
 .btn-primary svg {
   stroke: currentColor;
 }
+.btn-retrieve {
+  justify-content: center;
+  min-width: 52px;
+  background: var(--uvy-accent-fill);
+  color: #182b49;
+}
+.btn-retrieve:hover {
+  background: #e67d1d;
+  color: #182b49;
+}
+.btn-retrieve .htmx-indicator {
+  border-color: #182b4966;
+  border-top-color: #182b49;
+}
 .btn-secondary, .theme-toggle, .btn-copy, .btn-graph-download, .btn-graph-control {
   min-height: 44px;
   background: var(--uvy-surface);

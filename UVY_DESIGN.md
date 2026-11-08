@@ -1,6 +1,8 @@
 # UVY Design adoption
 
-Approved source: [UVY Design v0.1.0](https://github.com/UnitVectorY-Labs/uvy-design/tree/12f8e3d964785d78628346516351fe4dac583cef), commit `12f8e3d964785d78628346516351fe4dac583cef`.
+Historical asset source: [UVY Design v0.1.0](https://github.com/UnitVectorY-Labs/uvy-design/tree/12f8e3d964785d78628346516351fe4dac583cef), commit `12f8e3d964785d78628346516351fe4dac583cef`.
+
+Current guidance: [UVY Design](https://github.com/UnitVectorY-Labs/uvy-design/tree/7091d870bf1ed935b9c3089f9e480e064217983a), commit `7091d870bf1ed935b9c3089f9e480e064217983a`. The current guide is guidance-only; the historical assets remain locally maintained.
 
 ## Shared assets
 
@@ -20,9 +22,9 @@ HTMX remains its checked-in 4.0.0 bundle. Mermaid 11.12.2 is vendored at `intern
 
 ## Adapter and preserved behavior
 
-Retain the existing two-pane request/help entry, hidden manual-import entry point, result/trust graph, graph zoom/pan/download/selection, decode views, settings, links and backend/schema. Blue actions/header, orange accents, 8px panel/6px control radii, subtle shadows, system fonts and standard density map existing selectors to guide tokens. Existing semantic certificate/trust colors are unchanged. Small technical text becomes readable 14px; existing PEM/raw blocks retain intentional local overflow. Decode tabs already present in this app remain; none are introduced.
+Retain the existing two-pane request/help entry, hidden manual-import entry point, result/trust graph, graph zoom/pan/download/selection, decode views, settings, links and backend/schema. Blue header and text actions, orange primary icon action and accents, 8px panel/6px control radii, subtle shadows, system fonts and standard density map existing selectors to guide tokens. Existing semantic certificate/trust colors are unchanged. Small technical text becomes readable 14px; existing PEM/raw blocks retain intentional local overflow. Decode tabs already present in this app remain; none are introduced.
 
-The top-right binary toggle initializes from system preference and saves an explicit host-only cookie. The footer uses this project's source/license links in normal flow. Existing main input controls receive accessible names; submit labels stay visible on mobile. `[hidden]` remains authoritative when scripts are unavailable. Compiled Tailwind uses `data-theme` rather than a second appearance class/controller.
+The top-right binary toggle initializes from system preference and saves an explicit host-only cookie. The footer uses this project's source/license links in normal flow. Existing main input controls receive accessible names; the icon-only retrieve button has an accessible name. `[hidden]` remains authoritative when scripts are unavailable. Compiled Tailwind uses `data-theme` rather than a second appearance class/controller.
 
 ## Build and review
 

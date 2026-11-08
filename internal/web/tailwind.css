@@ -804,6 +804,9 @@ body { min-height: 100dvh; background: var(--uvy-page); color: var(--uvy-text); 
 .btn-primary { min-height: 44px; background: var(--uvy-link); color: var(--uvy-surface); border-radius: var(--uvy-radius-control); box-shadow: var(--uvy-shadow); }
 .btn-primary:hover { background: var(--uvy-masthead); color: white; }
 .btn-primary svg { stroke: currentColor; }
+.btn-retrieve { justify-content: center; min-width: 52px; background: var(--uvy-accent-fill); color: #182b49; }
+.btn-retrieve:hover { background: #e67d1d; color: #182b49; }
+.btn-retrieve .htmx-indicator { border-color: #182b4966; border-top-color: #182b49; }
 .btn-secondary, .theme-toggle, .btn-copy, .btn-graph-download, .btn-graph-control { min-height: 44px; background: var(--uvy-surface); color: var(--uvy-text); border-color: var(--uvy-control); border-radius: var(--uvy-radius-control); box-shadow: var(--uvy-shadow); }
 .btn-secondary:hover, .theme-toggle:hover, .btn-copy:hover, .btn-graph-download:hover, .btn-graph-control:hover { background: var(--uvy-blue-soft); border-color: var(--uvy-link); color: var(--uvy-link); }
 .domain-input:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--uvy-focus); outline-offset: 3px; }
