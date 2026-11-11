@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"math/big"
@@ -64,13 +64,16 @@ func Fetch(ctx context.Context, client HTTPClient, source string) ([]Rule, error
 func ParseOneCRL(b []byte) ([]Rule, error) {
 	var feed struct {
 		Data []struct {
-			ID      string                    `json:"id"`
-			Enabled *bool                     `json:"enabled"`
-			Issuer  string                    `json:"issuerName"`
-			Serial  string                    `json:"serialNumber"`
-			Subject string                    `json:"subject"`
-			Key     string                    `json:"pubKeyHash"`
-			Details struct{ Bug, Why string } `json:"details"`
+			ID      string `json:"id"`
+			Enabled *bool  `json:"enabled"`
+			Issuer  string `json:"issuerName"`
+			Serial  string `json:"serialNumber"`
+			Subject string `json:"subject"`
+			Key     string `json:"pubKeyHash"`
+			Details struct {
+				Bug string `json:"bug"`
+				Why string `json:"why"`
+			} `json:"details"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(b, &feed); err != nil {
