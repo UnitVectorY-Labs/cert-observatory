@@ -60,14 +60,15 @@ type ChainGraphData struct {
 
 // ChainGraphLegend indicates which node-type legend items are present in the graph.
 type ChainGraphLegend struct {
-	HasDistrust          bool
-	HasServerCertificate bool
-	HasIntermediateCA    bool
-	HasRootCA            bool
-	HasMissing           bool
-	HasExpired           bool
-	CrossSignedMarkers   []string
-	CrossSignedMarkerKey string
+	HasDistrust           bool
+	HasDistrustedNonChain bool
+	HasServerCertificate  bool
+	HasIntermediateCA     bool
+	HasRootCA             bool
+	HasMissing            bool
+	HasExpired            bool
+	CrossSignedMarkers    []string
+	CrossSignedMarkerKey  string
 }
 
 // ChainGraphFilters controls which certificates are included in the graph.
@@ -131,17 +132,18 @@ func buildChainGraph(ctx context.Context, repo Repository, chainCerts []*Certifi
 
 // mermaidGraphBuilder converts ChainGraphNode trees into Mermaid flowchart syntax.
 type mermaidGraphBuilder struct {
-	nextNodeID      int
-	nextMissingID   int
-	nodeIDByHash    map[string]string
-	nodeToCertIndex map[string]int
-	inChainNodeSet  map[string]bool
-	inChainNodeIDs  []string
-	classMembers    map[string][]string
-	edges           map[string]bool
-	lines           []string
-	hasExpired      bool
-	crossMarkers    []string
+	nextNodeID                int
+	nextMissingID             int
+	nodeIDByHash              map[string]string
+	nodeToCertIndex           map[string]int
+	inChainNodeSet            map[string]bool
+	inChainNodeIDs            []string
+	distrustedNonChainNodeIDs []string
+	classMembers              map[string][]string
+	edges                     map[string]bool
+	lines                     []string
+	hasExpired                bool
+	crossMarkers              []string
 }
 
 func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGraphLegend) {
@@ -177,6 +179,18 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 		)
 	}
 
+	if len(b.distrustedNonChainNodeIDs) > 0 {
+		b.lines = append(b.lines,
+			`subgraph distrustedNonChain[" "]`,
+			"direction TB",
+		)
+		b.lines = append(b.lines, b.distrustedNonChainNodeIDs...)
+		b.lines = append(b.lines,
+			"end",
+			"style distrustedNonChain fill:transparent,stroke-width:1px,stroke-dasharray:4 3;",
+		)
+	}
+
 	for _, className := range []string{"leaf", "intermediate", "root", "missing", "interactive", "distrust"} {
 		ids, ok := b.classMembers[className]
 		if !ok || len(ids) == 0 {
@@ -195,14 +209,15 @@ func buildMermaidDiagram(root *ChainGraphNode) (string, map[string]int, ChainGra
 	)
 
 	legend := ChainGraphLegend{
-		HasServerCertificate: len(b.classMembers["leaf"]) > 0,
-		HasIntermediateCA:    len(b.classMembers["intermediate"]) > 0,
-		HasRootCA:            len(b.classMembers["root"]) > 0,
-		HasMissing:           len(b.classMembers["missing"]) > 0,
-		HasExpired:           b.hasExpired,
-		HasDistrust:          len(b.classMembers["distrust"]) > 0,
-		CrossSignedMarkers:   b.crossMarkers,
-		CrossSignedMarkerKey: strings.Join(b.crossMarkers, " / "),
+		HasServerCertificate:  len(b.classMembers["leaf"]) > 0,
+		HasIntermediateCA:     len(b.classMembers["intermediate"]) > 0,
+		HasRootCA:             len(b.classMembers["root"]) > 0,
+		HasMissing:            len(b.classMembers["missing"]) > 0,
+		HasExpired:            b.hasExpired,
+		HasDistrust:           len(b.classMembers["distrust"]) > 0,
+		HasDistrustedNonChain: len(b.distrustedNonChainNodeIDs) > 0,
+		CrossSignedMarkers:    b.crossMarkers,
+		CrossSignedMarkerKey:  strings.Join(b.crossMarkers, " / "),
 	}
 
 	return strings.Join(b.lines, "\n"), b.nodeToCertIndex, legend
@@ -384,6 +399,8 @@ func (b *mermaidGraphBuilder) ensureNode(node *ChainGraphNode) string {
 	b.addClassMember(className, nodeID)
 	if node.InChain {
 		b.addInChainNode(nodeID)
+	} else if node.HasDistrust && !node.IsMissing {
+		b.distrustedNonChainNodeIDs = append(b.distrustedNonChainNodeIDs, nodeID)
 	}
 
 	if node.CertIndex >= 0 {
