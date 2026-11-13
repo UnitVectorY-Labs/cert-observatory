@@ -2406,6 +2406,13 @@ a {
   width: 100%;
   text-align: center;
 }
+.trust-path-mermaid .cluster[id="distrustedNonChain"] rect {
+  stroke: var(--mermaid-distrust) !important;
+}
+.legend-distrusted-group {
+  border: 2px dashed var(--mermaid-distrust);
+  background: transparent;
+}
 .trust-path-mermaid .node .label, .trust-path-mermaid .nodeLabel {
   font-size: 0.78rem;
   font-weight: 500;

@@ -115,3 +115,10 @@ Feed freshness is displayed separately. The web server reads stored rules withou
 services. Missing or stale feeds are identified; absence of a warning does not mean
 a certificate is trusted or unrevoked. Leaf certificates are outside this feature's
 scope.
+
+Distrusted certificates discovered outside the presented chain are grouped within
+an amber dashed box, identified by the “Distrusted Outside Chain” legend entry.
+Certificates presented by the server stay in the presented-chain box even when
+flagged as distrusted. Individual warnings, certificate-role colors, and issuer
+arrows remain visible. The group is omitted when no displayed certificates qualify;
+the additional-path and expiration filters still control which certificates appear.
