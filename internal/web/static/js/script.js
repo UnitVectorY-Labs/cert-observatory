@@ -635,10 +635,14 @@ function initializePage() {
         mermaid.initialize({
             startOnLoad: false,
             securityLevel: "loose",
-            layout: "dagre",
+            layout: "elk",
+            elk: {
+                layeringStrategy: "MIN_WIDTH",
+                nodePlacementAlignment: "NONE",
+            },
             theme: "default",
             look: "classic",
-            flowchart: { curve: "monotoneY" },
+            flowchart: { curve: "monotoneY", nodeSpacing: 25, rankSpacing: 70 },
         });
     }
 
