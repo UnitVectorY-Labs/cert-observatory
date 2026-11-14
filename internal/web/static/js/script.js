@@ -638,6 +638,7 @@ function initializePage() {
             layout: "dagre",
             theme: "default",
             look: "classic",
+            flowchart: { curve: "monotoneY" },
         });
     }
 
