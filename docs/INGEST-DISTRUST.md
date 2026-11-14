@@ -62,6 +62,11 @@ OneCRL pagination fail the refresh. A new upstream schema or pagination mechanis
 may require a software update. Complete, well-formed upstream snapshots are
 trusted; the application cannot detect every upstream omission.
 
+OneCRL JSON rejects duplicate object names and invalid UTF-8, and field names are
+case-sensitive. These stricter rules can reject feeds previously accepted by the
+original Go JSON parser. The application does not emit JSON for this feed, so the
+JSON v2 encoding changes for empty values and nil collections do not affect its output.
+
 ## Options
 
 | Flag | Environment variable | Default | Description |

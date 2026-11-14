@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"math/big"
 	"strings"
 	"testing"
@@ -85,6 +85,9 @@ func TestParseOneCRL(t *testing.T) {
 	if len(rules) != 2 || len(rules[0].SerialNumber) != 1 || rules[0].SerialNumber[0] != 128 || rules[1].MatchType != "subject_public_key_hash" {
 		t.Fatalf("incorrect rules: %+v", rules)
 	}
+	if rules[0].ReferenceURL != "https://example.test/incident" {
+		t.Fatalf("lost OneCRL details: %+v", rules[0])
+	}
 	if !rules[0].Matches(testCertificate(), time.Now()) {
 		t.Fatal("normalized serial did not match")
 	}
@@ -96,6 +99,25 @@ func TestParseOneCRL(t *testing.T) {
 		if _, err = ParseOneCRL([]byte(bad)); err == nil {
 			t.Fatalf("accepted malformed snapshot %s", bad)
 		}
+	}
+}
+
+func TestParseOneCRLStrictJSON(t *testing.T) {
+	valid := `{"data":[{"id":"x","enabled":true,"issuerName":"MAA=","serialNumber":"AQ==","details":{"bug":"https://example.test/bug","why":"reason"}}]}`
+	rules, err := ParseOneCRL([]byte(valid))
+	if err != nil || len(rules) != 1 || rules[0].ReferenceURL != "https://example.test/bug" || rules[0].Reason != "reason" {
+		t.Fatalf("valid details: rules=%+v err=%v", rules, err)
+	}
+	for name, input := range map[string]string{
+		"duplicate name":               strings.Replace(valid, `"enabled":true`, `"enabled":true,"enabled":false`, 1),
+		"invalid UTF-8":                strings.Replace(valid, `"reason"`, "\"\xff\"", 1),
+		"case-sensitive required name": strings.Replace(valid, `"enabled"`, `"Enabled"`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParseOneCRL([]byte(input)); err == nil {
+				t.Fatal("accepted invalid OneCRL JSON")
+			}
+		})
 	}
 }
 
