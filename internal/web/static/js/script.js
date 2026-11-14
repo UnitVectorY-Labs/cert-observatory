@@ -635,6 +635,9 @@ function initializePage() {
         mermaid.initialize({
             startOnLoad: false,
             securityLevel: "loose",
+            layout: "dagre",
+            theme: "default",
+            look: "classic",
         });
     }
 
