@@ -313,6 +313,36 @@ function initializeTrustPathGraphControls(scope) {
     }
 }
 
+async function copyMermaid(button) {
+    var section = button.closest(".section-card");
+    var source = section.querySelector("[data-mermaid-source]");
+    var status = section.querySelector("[data-mermaid-copy-status]");
+    if (!source || button.disabled) {
+        return;
+    }
+
+    var originalHTML = button.innerHTML;
+    button.disabled = true;
+    status.textContent = "";
+    try {
+        await navigator.clipboard.writeText(source.textContent);
+        button.querySelector("svg").outerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4l10 -10" /></svg>';
+        button.title = "Copied!";
+        button.setAttribute("aria-label", "Mermaid source copied");
+        status.textContent = "Mermaid source copied.";
+    } catch (err) {
+        button.title = "Copy failed. Try again.";
+        button.setAttribute("aria-label", "Copy failed. Try again.");
+        status.textContent = "Could not copy Mermaid source. Try again.";
+    }
+    setTimeout(function () {
+        button.innerHTML = originalHTML;
+        button.title = "Copy Mermaid source";
+        button.setAttribute("aria-label", "Copy Mermaid source");
+        button.disabled = false;
+    }, 1500);
+}
+
 function copyPEM(button, certHash) {
     var pemBlock = document.getElementById("pem-" + certHash);
     if (pemBlock) {

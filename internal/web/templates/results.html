@@ -62,6 +62,7 @@
         <div class="graph-scroll">
             <div class="graph-center">
                 <div class="trust-path-mermaid py-1">
+                    <pre data-mermaid-source hidden>{{.ChainGraph.MermaidDiagram}}</pre>
                     <pre class="mermaid">{{.ChainGraph.MermaidDiagram}}</pre>
                     {{range $nodeID, $idx := .ChainGraph.MermaidNodeToCertIndex}}
                     <span class="tp-node-map" data-node-id="{{$nodeID}}" data-cert-idx="{{$idx}}" hidden></span>
@@ -81,7 +82,12 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
                 </button>
             </div>
-            <div class="graph-download-actions" aria-label="Download PEM certificates">
+            <div class="graph-download-actions" aria-label="Diagram and certificate actions">
+                <button type="button" class="btn-graph-download" onclick="copyMermaid(this)" title="Copy Mermaid source" aria-label="Copy Mermaid source">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg>
+                    <span>Mermaid</span>
+                </button>
+                <span data-mermaid-copy-status role="status" class="sr-only"></span>
                 {{if and (not .IsManual) .ChainDownloadURL}}
                 <a class="btn-graph-download" href="{{.ChainDownloadURL}}" title="Download presented chain certificates as PEM">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
