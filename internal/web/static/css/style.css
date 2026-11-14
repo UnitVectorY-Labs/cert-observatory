@@ -2405,7 +2405,7 @@ a {
   display: block;
   width: 100% !important;
   max-width: 100% !important;
-  height: clamp(24rem, 54vh, 38rem) !important;
+  height: auto;
   cursor: grab;
   user-select: none;
 }

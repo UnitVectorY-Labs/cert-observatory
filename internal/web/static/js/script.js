@@ -201,7 +201,43 @@ function initializeTrustPathPanZoom(svg) {
     svg.dataset.trustPathPanZoom = "ready";
     svg.setAttribute("role", "img");
     svg.style.touchAction = "none";
+    // Keep the layout bounds separate from the viewBox modified by pan/zoom.
+    var contentBounds = getSVGViewBox(svg);
+    function resizeGraph() {
+        var width = svg.parentElement.getBoundingClientRect().width;
+        if (width <= 0 || contentBounds.width <= 0 || contentBounds.height <= 0) {
+            return;
+        }
+        var scale = Math.min(1, width / contentBounds.width);
+        svg.style.setProperty("height", (contentBounds.height * scale) + "px");
+        var initial = fitViewBoxToSVGAspect(svg, contentBounds);
+        var state = svg.__trustPathPanZoom;
+        if (state) {
+            var zoom = state.current.width / state.initial.width;
+            var centerX = state.current.x + state.current.width / 2;
+            var centerY = state.current.y + state.current.height / 2;
+            state.initial = Object.assign({}, initial);
+            state.current = {
+                x: centerX - initial.width * zoom / 2,
+                y: centerY - initial.height * zoom / 2,
+                width: initial.width * zoom,
+                height: initial.height * zoom,
+            };
+            setSVGViewBox(svg, state.current);
+        }
+    }
+    resizeGraph();
     getTrustPathGraphState(svg);
+    if (typeof ResizeObserver !== "undefined") {
+        var observer = new ResizeObserver(function () {
+            if (!svg.isConnected) {
+                observer.disconnect();
+                return;
+            }
+            resizeGraph();
+        });
+        observer.observe(svg.parentElement);
+    }
 
     var drag = {
         active: false,
