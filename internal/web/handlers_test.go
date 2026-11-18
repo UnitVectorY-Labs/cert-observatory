@@ -171,8 +171,8 @@ func TestHandleIndex(t *testing.T) {
 		t.Error("Page should not contain CSRF token field")
 	}
 
-	if !strings.Contains(body, "UnitVectorY Labs") {
-		t.Error("Expected page to contain footer with UnitVectorY Labs")
+	if !strings.Contains(body, "Open source on GitHub") {
+		t.Error("Expected page to contain project source footer")
 	}
 
 	if !strings.Contains(body, "/static/css/style.css?v=") {

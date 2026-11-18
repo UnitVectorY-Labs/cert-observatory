@@ -1,44 +1,41 @@
-(function () {
+(() => {
+  if (window.__uvyThemeInitialized) return;
+  window.__uvyThemeInitialized = true;
+  const root = document.documentElement;
+  const selector = '[data-uvy-theme-toggle], #theme-toggle';
+  const system = matchMedia('(prefers-color-scheme: dark)');
+  let preference = null;
+  try {
+    const cookie = document.cookie.split('; ').find(value => value.startsWith('uvy-theme='));
+    const saved = cookie?.slice('uvy-theme='.length);
+    if (saved === 'light' || saved === 'dark') preference = saved;
+  } catch {}
+  const sync = () => {
+    const dark = preference ? preference === 'dark' : system.matches;
+    root.dataset.theme = dark ? 'dark' : 'light';
+    root.style.colorScheme = dark ? 'dark' : 'light';
+    document.querySelectorAll(selector).forEach(button => {
+      button.hidden = false;
+      button.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+      button.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+    });
+  };
+  sync();
+  system.addEventListener('change', () => { if (!preference) sync(); });
+  document.addEventListener('click', event => {
+    if (!(event.target instanceof Element) || !event.target.closest(selector)) return;
+    preference = root.dataset.theme === 'dark' ? 'light' : 'dark';
     try {
-        var saved = localStorage.getItem("theme");
-        if (saved === "light") {
-            document.documentElement.classList.remove("dark");
-        } else {
-            document.documentElement.classList.add("dark");
-        }
-    } catch (err) {
-        document.documentElement.classList.add("dark");
-    }
+      document.cookie = `uvy-theme=${preference}; Path=/; Max-Age=31536000; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
+    } catch {}
+    sync();
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, { once: true });
+  else sync();
+  // Both spellings are version-specific; supporting shell reinitialization is harmless.
+  document.addEventListener('htmx:after:swap', sync);
+  document.addEventListener('htmx:afterSwap', sync);
 })();
-
-function updateThemeToggleLabel(isDark) {
-    var btn = document.getElementById("theme-toggle");
-    if (!btn) {
-        return;
-    }
-    var labelEl = btn.querySelector("[data-theme-label]");
-    if (labelEl) {
-        labelEl.textContent = isDark ? "Light mode" : "Dark mode";
-    }
-    btn.setAttribute("aria-pressed", String(isDark));
-    btn.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
-}
-
-function setTheme(theme) {
-    var dark = theme !== "light";
-    document.documentElement.classList.toggle("dark", dark);
-    updateThemeToggleLabel(dark);
-    try {
-        localStorage.setItem("theme", dark ? "dark" : "light");
-    } catch (err) {
-        // Ignore storage failures.
-    }
-}
-
-function toggleTheme() {
-    var currentlyDark = document.documentElement.classList.contains("dark");
-    setTheme(currentlyDark ? "light" : "dark");
-}
 
 function clearResults() {
     var results = document.getElementById("results");
@@ -680,12 +677,6 @@ function initializePage() {
             look: "classic",
             flowchart: { curve: "monotoneY", nodeSpacing: 25, rankSpacing: 70 },
         });
-    }
-
-    var toggle = document.getElementById("theme-toggle");
-    if (toggle) {
-        toggle.addEventListener("click", toggleTheme);
-        updateThemeToggleLabel(document.documentElement.classList.contains("dark"));
     }
 
     var hexSepBtn = document.getElementById("hex-separator-toggle");

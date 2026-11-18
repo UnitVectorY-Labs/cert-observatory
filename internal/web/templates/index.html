@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,16 +14,59 @@
             <div class="header-row">
                 <div>
                     <h1 class="brand-title">
-                        <span class="brand-mark" aria-hidden="true">🔐</span>
+                        <span class="brand-mark" aria-hidden="true"><svg aria-hidden="true" focusable="false"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+  <path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" />
+  <path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" />
+  <path d="M6 9l12 0" />
+  <path d="M6 12l3 0" />
+  <path d="M6 15l2 0" />
+</svg>
+</span>
                         <span>Cert Observatory</span>
                     </h1>
-                    <p class="brand-subtitle">Retrieve and inspect TLS certificate chains for any domain.</p>
                 </div>
                 <div class="header-controls">
-                    <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
-                        <svg data-theme-sun xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m16 0h1" /><path d="M12 3v1m0 16v1" /><path d="M5.6 5.6l.7 .7m11.4 11.4l.7 .7" /><path d="M5.6 18.4l.7 -.7m11.4 -11.4l.7 -.7" /></svg>
-                        <svg data-theme-moon xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 dark:hidden"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 .007a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
-                        <span data-theme-label class="theme-toggle-label">Toggle theme</span>
+                    <button type="button" id="theme-toggle" data-uvy-theme-toggle class="uvy-theme-toggle" aria-label="Switch to dark mode" hidden>
+                        <span class="uvy-theme-dark-icon"><svg aria-hidden="true" focusable="false"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454l0 .008" />
+</svg>
+</span>
+                        <span class="uvy-theme-light-icon"><svg aria-hidden="true" focusable="false"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+  <path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" />
+</svg>
+</span>
                     </button>
                 </div>
             </div>
@@ -38,18 +81,19 @@
                 <form id="manual-form" method="POST" action="/manual" class="domain-form" hx-post="/manual" hx-target="#results" hx-indicator="#loading">
                     <textarea
                         name="pem"
+                        aria-label="PEM certificates"
                         class="domain-input"
                         placeholder="Paste 1–5 PEM certificates&#10;-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
                         rows="6"
                         required
                         autocomplete="off"
                         spellcheck="false"
-                        style="font-family: monospace; font-size: 0.52rem; line-height: 1.35; resize: vertical;"
+                        style="font-family: var(--uvy-mono); font-size: 14px; line-height: 1.5; resize: vertical;"
                     ></textarea>
                     <button type="submit" class="btn-primary">
                         <span class="htmx-indicator h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
-                        <span class="hidden sm:inline">Import</span>
+                        <span>Import</span>
                     </button>
                 </form>
                 <div class="option-list">
@@ -65,6 +109,7 @@
                     <input
                         type="text"
                         name="domain"
+                        aria-label="Domain to inspect"
                         class="domain-input"
                         placeholder="Enter domain (e.g., example.com)"
                         maxlength="253"
@@ -74,10 +119,9 @@
                         autocorrect="off"
                         spellcheck="false"
                     >
-                    <button type="submit" class="btn-primary">
+                    <button type="submit" class="btn-primary btn-retrieve" aria-label="Retrieve certificate" title="Retrieve certificate">
                         <span class="htmx-indicator h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
-                        <span class="hidden sm:inline">Retrieve</span>
+                        <svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
                     </button>
                 </form>
                 <div class="option-list">
@@ -195,11 +239,7 @@
     </main>
 
     <footer class="footer-shell">
-        <p class="m-0">
-            <a href="https://github.com/UnitVectorY-Labs" class="link-accent">UnitVectorY Labs</a> |
-            <a href="https://opensource.org/licenses/MIT" class="link-accent">MIT License</a> |
-            <a href="https://github.com/UnitVectorY-Labs/cert-observatory" class="link-accent"><strong>cert-observatory</strong> on GitHub</a>
-        </p>
+        <p class="m-0"><a href="https://github.com/UnitVectorY-Labs/cert-observatory" class="link-accent">Open source on GitHub</a> · <a href="https://github.com/UnitVectorY-Labs/cert-observatory/blob/main/LICENSE" class="link-accent">MIT License</a></p>
     </footer>
 
     <script src="{{assetURL "/static/js/htmx.min.js"}}"></script>
