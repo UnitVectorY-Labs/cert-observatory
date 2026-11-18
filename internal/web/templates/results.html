@@ -35,6 +35,9 @@
             <p class="section-copy">Click a certificate to view its details.</p>
             <div class="legend-row">
                 <span class="legend-item"><span class="legend-swatch legend-chain"></span> Presented In Chain</span>
+                {{if .ChainGraph.Legend.HasDistrustedNonChain}}
+                <span class="legend-item"><span class="legend-swatch legend-distrusted-group"></span> Distrusted Outside Chain</span>
+                {{end}}
                 {{if .ChainGraph.Legend.HasServerCertificate}}
                 <span class="legend-item"><span class="legend-swatch legend-leaf"></span> Server Certificate</span>
                 {{end}}

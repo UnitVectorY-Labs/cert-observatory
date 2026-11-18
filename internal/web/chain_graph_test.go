@@ -753,3 +753,38 @@ func TestIsSignatureSelfSigned(t *testing.T) {
 		t.Error("nil parsed cert should not be self-signed")
 	}
 }
+
+func TestBuildMermaidDiagram_GroupsOnlyDistrustedNonChainCertificates(t *testing.T) {
+	for _, tc := range []struct {
+		name                                    string
+		inChain, distrusted, missing, wantGroup bool
+	}{
+		{name: "discovered distrusted CA", distrusted: true, wantGroup: true},
+		{name: "presented distrusted CA", inChain: true, distrusted: true},
+		{name: "discovered unflagged CA"},
+		{name: "missing issuer", distrusted: true, missing: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			issuer := &ChainGraphNode{HashHex: "issuer", SubjectCN: "Issuer", IsCA: true, InChain: tc.inChain, HasDistrust: tc.distrusted, IsMissing: tc.missing, CertIndex: 1}
+			// The same issuer appears through two branches; it must be grouped once.
+			root := &ChainGraphNode{HashHex: "leaf", SubjectCN: "Leaf", InChain: true, CertIndex: 0, Issuers: []*ChainGraphNode{issuer, {HashHex: "alternative", SubjectCN: "Alternative", IsCA: true, CertIndex: 2, Issuers: []*ChainGraphNode{issuer}}}}
+			diagram, mapping, legend := buildMermaidDiagram(root)
+			if legend.HasDistrustedNonChain != tc.wantGroup {
+				t.Fatalf("group legend = %v, want %v", legend.HasDistrustedNonChain, tc.wantGroup)
+			}
+			start := strings.Index(diagram, `subgraph distrustedNonChain[" "]`)
+			if (start >= 0) != tc.wantGroup {
+				t.Fatalf("unexpected grouping:\n%s", diagram)
+			}
+			if tc.wantGroup {
+				group := strings.SplitN(diagram[start:], "\nend", 2)[0]
+				if strings.Count(group, "\nn1") != 1 || strings.Contains(group, "\nn0") || strings.Contains(group, "\nn2") {
+					t.Fatalf("incorrect group members: %s", group)
+				}
+				if mapping["n1"] != 1 || strings.Count(diagram, "n0 --> n1") != 1 || strings.Count(diagram, "n2 --> n1") != 1 {
+					t.Fatalf("grouping changed certificate mapping or edges:\n%s", diagram)
+				}
+			}
+		})
+	}
+}
