@@ -94,6 +94,7 @@ All logging and errors are output to stderr.`,
 func serveWebCmd() *cobra.Command {
 	cfg := cmd.DefaultServeWebConfig()
 	cfg.DBConfig = &db.Config{}
+	cfg.Version = Version
 
 	c := &cobra.Command{
 		Use:   "serve-web",
@@ -113,6 +114,15 @@ inspect its certificate chain.`,
 					cfg.CrawlTimeout = d
 				}
 			}
+			if !c.Flags().Changed("show-version") {
+				if v := os.Getenv("SHOW_VERSION"); v != "" {
+					b, err := strconv.ParseBool(v)
+					if err != nil {
+						return fmt.Errorf("SHOW_VERSION: %w", err)
+					}
+					cfg.ShowVersion = b
+				}
+			}
 
 			applyDBEnvDefaults(cfg.DBConfig)
 
@@ -126,6 +136,7 @@ inspect its certificate chain.`,
 	c.Flags().DurationVar(&cfg.ReadTimeout, "read-timeout", 15*time.Second, "HTTP server read timeout")
 	c.Flags().DurationVar(&cfg.WriteTimeout, "write-timeout", 60*time.Second, "HTTP server write timeout")
 	c.Flags().DurationVar(&cfg.IdleTimeout, "idle-timeout", 120*time.Second, "HTTP server idle timeout")
+	c.Flags().BoolVar(&cfg.ShowVersion, "show-version", true, "Display application version in the web footer (env: SHOW_VERSION)")
 	c.Flags().BoolVar(&cfg.Verbose, "verbose", false, "Enable verbose/debug logging")
 
 	// Database connection flags

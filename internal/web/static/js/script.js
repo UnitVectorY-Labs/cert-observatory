@@ -1,45 +1,3 @@
-(function () {
-    try {
-        var saved = localStorage.getItem("theme");
-        if (saved === "light") {
-            document.documentElement.classList.remove("dark");
-        } else {
-            document.documentElement.classList.add("dark");
-        }
-    } catch (err) {
-        document.documentElement.classList.add("dark");
-    }
-})();
-
-function updateThemeToggleLabel(isDark) {
-    var btn = document.getElementById("theme-toggle");
-    if (!btn) {
-        return;
-    }
-    var labelEl = btn.querySelector("[data-theme-label]");
-    if (labelEl) {
-        labelEl.textContent = isDark ? "Light mode" : "Dark mode";
-    }
-    btn.setAttribute("aria-pressed", String(isDark));
-    btn.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
-}
-
-function setTheme(theme) {
-    var dark = theme !== "light";
-    document.documentElement.classList.toggle("dark", dark);
-    updateThemeToggleLabel(dark);
-    try {
-        localStorage.setItem("theme", dark ? "dark" : "light");
-    } catch (err) {
-        // Ignore storage failures.
-    }
-}
-
-function toggleTheme() {
-    var currentlyDark = document.documentElement.classList.contains("dark");
-    setTheme(currentlyDark ? "light" : "dark");
-}
-
 function clearResults() {
     var results = document.getElementById("results");
     if (results) {
@@ -190,7 +148,7 @@ function resetTrustPathGraph(svg) {
 }
 
 function findTrustPathSVG(control) {
-    var section = control && control.closest ? control.closest(".section-card") : null;
+    var section = control && control.closest ? control.closest(".co-graph-panel, .section-card") : null;
     return section ? section.querySelector(".trust-path-mermaid svg") : null;
 }
 
@@ -350,48 +308,55 @@ function initializeTrustPathGraphControls(scope) {
 }
 
 async function copyMermaid(button) {
-    var section = button.closest(".section-card");
-    var source = section.querySelector("[data-mermaid-source]");
-    var status = section.querySelector("[data-mermaid-copy-status]");
+    var section = button.closest(".co-graph-panel, .section-card");
+    var source = section ? section.querySelector("[data-mermaid-source]") : null;
+    var status = section ? section.querySelector("[data-mermaid-copy-status]") : null;
     if (!source || button.disabled) {
         return;
     }
 
-    var originalHTML = button.innerHTML;
     button.disabled = true;
-    status.textContent = "";
+    if (status) {
+        status.textContent = "";
+    }
     try {
         await navigator.clipboard.writeText(source.textContent);
-        button.querySelector("svg").outerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4l10 -10" /></svg>';
+        button.classList.add("is-copied");
         button.title = "Copied!";
         button.setAttribute("aria-label", "Mermaid source copied");
-        status.textContent = "Mermaid source copied.";
+        if (status) {
+            status.textContent = "Mermaid source copied.";
+        }
     } catch (err) {
         button.title = "Copy failed. Try again.";
         button.setAttribute("aria-label", "Copy failed. Try again.");
-        status.textContent = "Could not copy Mermaid source. Try again.";
+        if (status) {
+            status.textContent = "Could not copy Mermaid source. Try again.";
+        }
     }
-    setTimeout(function () {
-        button.innerHTML = originalHTML;
+    clearTimeout(button._copyTimer);
+    button._copyTimer = setTimeout(function () {
+        button.classList.remove("is-copied");
         button.title = "Copy Mermaid source";
         button.setAttribute("aria-label", "Copy Mermaid source");
         button.disabled = false;
-    }, 1500);
+    }, 1800);
 }
 
 function copyPEM(button, certHash) {
     var pemBlock = document.getElementById("pem-" + certHash);
-    if (pemBlock) {
-        navigator.clipboard.writeText(pemBlock.textContent).then(function () {
-            var originalHTML = button.innerHTML;
-            button.textContent = "Copied!";
-            button.classList.add("copied");
-            setTimeout(function () {
-                button.innerHTML = originalHTML;
-                button.classList.remove("copied");
-            }, 1500);
-        });
+    if (!pemBlock) {
+        return;
     }
+    navigator.clipboard.writeText(pemBlock.textContent).then(function () {
+        button.classList.add("is-copied");
+        clearTimeout(button._copyTimer);
+        button._copyTimer = setTimeout(function () {
+            button.classList.remove("is-copied");
+        }, 1800);
+    }).catch(function () {
+        // Ignore clipboard errors.
+    });
 }
 
 function switchCertDecodeTab(button, selected) {
@@ -403,14 +368,55 @@ function switchCertDecodeTab(button, selected) {
     var buttons = root.querySelectorAll("[data-cert-tab-button]");
     for (var i = 0; i < buttons.length; i++) {
         var isActive = buttons[i].dataset.certTabButton === selected;
-        buttons[i].classList.toggle("is-active", isActive);
         buttons[i].setAttribute("aria-selected", String(isActive));
+        buttons[i].tabIndex = isActive ? 0 : -1;
     }
 
     var panels = root.querySelectorAll("[data-cert-tab-panel]");
     for (var j = 0; j < panels.length; j++) {
         var isSelected = panels[j].dataset.certTabPanel === selected;
-        panels[j].classList.toggle("hidden", !isSelected);
+        panels[j].hidden = !isSelected;
+    }
+}
+
+function initCertTabKeyboard() {
+    document.addEventListener("keydown", function (event) {
+        var tab = event.target && event.target.closest ? event.target.closest('[data-cert-tabs] [role="tab"]') : null;
+        if (!tab) {
+            return;
+        }
+        var list = tab.closest('[role="tablist"]');
+        if (!list) {
+            return;
+        }
+        var tabs = Array.from(list.querySelectorAll('[role="tab"]'));
+        var index = tabs.indexOf(tab);
+        if (index === -1) {
+            return;
+        }
+        var target = null;
+        if (event.key === "ArrowRight") {
+            target = tabs[(index + 1) % tabs.length];
+        } else if (event.key === "ArrowLeft") {
+            target = tabs[(index - 1 + tabs.length) % tabs.length];
+        } else if (event.key === "Home") {
+            target = tabs[0];
+        } else if (event.key === "End") {
+            target = tabs[tabs.length - 1];
+        }
+        if (target) {
+            event.preventDefault();
+            switchCertDecodeTab(target, target.dataset.certTabButton);
+            target.focus();
+        }
+    });
+}
+
+function syncCertTabIndexes(scope) {
+    var root = scope || document;
+    var tabs = root.querySelectorAll ? root.querySelectorAll('[data-cert-tabs] [role="tab"]') : [];
+    for (var i = 0; i < tabs.length; i++) {
+        tabs[i].tabIndex = tabs[i].getAttribute("aria-selected") === "true" ? 0 : -1;
     }
 }
 
@@ -479,7 +485,6 @@ function findRenderedMermaidEdges(nodeId) {
     if (!nodeId) {
         return [];
     }
-    // In Mermaid v11, edges are <path class="flowchart-link"> with IDs like L_n0_n1_0.
     var allEdgePaths = document.querySelectorAll(".trust-path-mermaid path.flowchart-link");
     var matches = [];
     var escapedId = nodeId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -509,12 +514,7 @@ function setTrustPathNodeSelected(nodeEl, isSelected) {
     }
 }
 
-// Trust path graph: reveal the pre-rendered detail pane for the clicked node.
-function selectTrustPathCert(nodeId, certIdx) {
-    if (certIdx < 0) {
-        return;
-    }
-
+function clearTrustPathSelection() {
     var allNodes = document.querySelectorAll(".trust-path-mermaid .node");
     for (var i = 0; i < allNodes.length; i++) {
         allNodes[i].classList.remove("tp-active");
@@ -525,6 +525,39 @@ function selectTrustPathCert(nodeId, certIdx) {
     for (var e = 0; e < allEdges.length; e++) {
         allEdges[e].classList.remove("tp-active-edge");
     }
+}
+
+function showFullCertChain() {
+    clearTrustPathSelection();
+
+    var chainHeading = document.getElementById("chain-heading");
+    if (chainHeading) {
+        chainHeading.style.display = "";
+    }
+
+    var selectedHeading = document.getElementById("selected-cert-heading");
+    if (selectedHeading) {
+        selectedHeading.style.display = "none";
+    }
+
+    var chainList = document.getElementById("certificate-chain-list");
+    if (chainList) {
+        chainList.style.display = "";
+    }
+
+    var allPanes = document.querySelectorAll(".trust-path-cert-pane");
+    for (var j = 0; j < allPanes.length; j++) {
+        allPanes[j].style.display = "none";
+    }
+}
+
+// Trust path graph: reveal the pre-rendered detail pane for the clicked node.
+function selectTrustPathCert(nodeId, certIdx) {
+    if (certIdx < 0) {
+        return;
+    }
+
+    clearTrustPathSelection();
 
     var activeNodes = findRenderedMermaidNodes(nodeId);
     for (var k = 0; k < activeNodes.length; k++) {
@@ -544,7 +577,7 @@ function selectTrustPathCert(nodeId, certIdx) {
 
     var selectedHeading = document.getElementById("selected-cert-heading");
     if (selectedHeading) {
-        selectedHeading.style.display = "block";
+        selectedHeading.style.display = "";
     }
 
     var chainList = document.getElementById("certificate-chain-list");
@@ -553,8 +586,8 @@ function selectTrustPathCert(nodeId, certIdx) {
     }
 
     var allPanes = document.querySelectorAll(".trust-path-cert-pane");
-    for (var j = 0; j < allPanes.length; j++) {
-        allPanes[j].style.display = "none";
+    for (var m = 0; m < allPanes.length; m++) {
+        allPanes[m].style.display = "none";
     }
 
     var targetPane = document.getElementById("trust-cert-pane-" + certIdx);
@@ -677,15 +710,13 @@ function initializePage() {
                 nodePlacementAlignment: "NONE",
             },
             theme: "default",
+            themeVariables: {
+                fontFamily: 'ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo, Consolas, monospace',
+                fontSize: "13px",
+            },
             look: "classic",
             flowchart: { curve: "monotoneY", nodeSpacing: 25, rankSpacing: 70 },
         });
-    }
-
-    var toggle = document.getElementById("theme-toggle");
-    if (toggle) {
-        toggle.addEventListener("click", toggleTheme);
-        updateThemeToggleLabel(document.documentElement.classList.contains("dark"));
     }
 
     var hexSepBtn = document.getElementById("hex-separator-toggle");
@@ -709,10 +740,13 @@ function initializePage() {
             var swapTarget = evt.detail && evt.detail.ctx ? evt.detail.ctx.target : evt.target;
             renderTrustPathMermaid(swapTarget);
             applyHexFormat(swapTarget);
+            syncCertTabIndexes(swapTarget);
         });
     }
 
+    initCertTabKeyboard();
     renderTrustPathMermaid(document);
+    syncCertTabIndexes(document);
 }
 
 if (document.readyState === "loading") {

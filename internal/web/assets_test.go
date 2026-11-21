@@ -8,9 +8,13 @@ import (
 
 func TestBuildAssetVersions(t *testing.T) {
 	staticFiles := fstest.MapFS{
-		"static/css/style.css":  {Data: []byte("body { color: red; }")},
-		"static/js/htmx.min.js": {Data: []byte("htmx 4")},
-		"static/js/script.js":   {Data: []byte("console.log('hello')")},
+		"static/css/uvy.css":                        {Data: []byte(":root { --uvy-bg: #f5f7fa; }")},
+		"static/css/style.css":                      {Data: []byte("body { color: red; }")},
+		"static/js/uvy.js":                          {Data: []byte("/* uvy */")},
+		"static/js/htmx.min.js":                     {Data: []byte("htmx 4")},
+		"static/js/script.js":                       {Data: []byte("console.log('hello')")},
+		"static/img/uvy-standalone-mark-light.svg":  {Data: []byte("<svg></svg>")},
+		"static/img/uvy-standalone-mark-dark.svg":   {Data: []byte("<svg></svg>")},
 	}
 
 	versions, err := buildAssetVersions(staticFiles, versionedAssetPaths)
@@ -63,5 +67,17 @@ func TestEmbeddedHTMXVersion(t *testing.T) {
 
 	if !strings.Contains(string(asset), `version="4.0.0"`) {
 		t.Fatal("embedded HTMX asset is not version 4.0.0")
+	}
+}
+
+func TestEmbeddedDesignAssets(t *testing.T) {
+	for _, path := range versionedAssetPaths {
+		asset, err := staticFS.ReadFile(strings.TrimPrefix(path, "/"))
+		if err != nil {
+			t.Fatalf("read embedded asset %s: %v", path, err)
+		}
+		if len(asset) == 0 {
+			t.Fatalf("embedded asset %s is empty", path)
+		}
 	}
 }

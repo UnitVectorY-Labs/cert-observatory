@@ -22,13 +22,21 @@ type IndexData struct {
 	Results    *ResultsViewData
 	Error      *ErrorData
 	ManualMode bool
+	Version    string
+}
+
+func (s *Server) displayVersion() string {
+	if s.config == nil || !s.config.ShowVersion {
+		return ""
+	}
+	return strings.TrimSpace(s.config.Version)
 }
 
 // handleIndex serves the main page (GET only, read-only, never triggers crawl).
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, manualMode := r.URL.Query()["manual"]
-	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{ManualMode: manualMode}); err != nil {
+	if err := s.templates.ExecuteTemplate(w, "index.html", &IndexData{ManualMode: manualMode, Version: s.displayVersion()}); err != nil {
 		s.logger.Error("failed to render index", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -502,7 +510,7 @@ func (s *Server) renderError(w http.ResponseWriter, r *http.Request, title, mess
 	}
 
 	// For regular requests, render full page with error
-	pageData := &IndexData{Error: errData}
+	pageData := &IndexData{Error: errData, Version: s.displayVersion()}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render error page", "error", err)
 		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", title, message)
@@ -536,7 +544,7 @@ func (s *Server) renderReservedDomainError(w http.ResponseWriter, r *http.Reques
 	}
 
 	// For regular requests, render full page with error
-	pageData := &IndexData{Error: errData}
+	pageData := &IndexData{Error: errData, Version: s.displayVersion()}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render error page", "error", err)
 		fmt.Fprintf(w, "<div class=\"error-block\"><h4>Reserved Domain</h4><p>%s</p></div>", info.Reason)
@@ -561,7 +569,7 @@ func (s *Server) renderManualError(w http.ResponseWriter, r *http.Request, title
 		return
 	}
 
-	pageData := &IndexData{Error: errData, ManualMode: true}
+	pageData := &IndexData{Error: errData, ManualMode: true, Version: s.displayVersion()}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render error page", "error", err)
 		fmt.Fprintf(w, "<div class=\"error-block\"><h4>%s</h4><p>%s</p></div>", html.EscapeString(title), html.EscapeString(message))
@@ -623,7 +631,7 @@ func (s *Server) renderResults(w http.ResponseWriter, r *http.Request, data *Res
 	}
 
 	// Otherwise, render the full page with results
-	pageData := &IndexData{Results: data}
+	pageData := &IndexData{Results: data, Version: s.displayVersion()}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render full page with results", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -645,7 +653,7 @@ func (s *Server) renderManualResults(w http.ResponseWriter, r *http.Request, dat
 	}
 
 	// For full-page responses keep ManualMode=true so the PEM textarea is shown again
-	pageData := &IndexData{Results: data, ManualMode: true}
+	pageData := &IndexData{Results: data, ManualMode: true, Version: s.displayVersion()}
 	if err := s.templates.ExecuteTemplate(w, "index.html", pageData); err != nil {
 		s.logger.Error("failed to render manual full page with results", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
