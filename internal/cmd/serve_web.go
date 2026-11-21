@@ -28,6 +28,10 @@ type ServeWebConfig struct {
 	IdleTimeout time.Duration
 	// DBConfig is the database configuration
 	DBConfig *db.Config
+	// Version is the application version displayed in the footer when ShowVersion is true
+	Version string
+	// ShowVersion controls whether the application version is shown in the footer
+	ShowVersion bool
 	// Verbose enables debug logging
 	Verbose bool
 	// Stderr is the writer for logging
@@ -42,6 +46,7 @@ func DefaultServeWebConfig() *ServeWebConfig {
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
+		ShowVersion:  true,
 		Stderr:       os.Stderr,
 	}
 }
@@ -86,6 +91,8 @@ func ServeWeb(ctx context.Context, cfg *ServeWebConfig) error {
 		IdleTimeout:           cfg.IdleTimeout,
 		StandardRefreshWindow: 23 * time.Hour,
 		ForcedRefreshWindow:   1 * time.Hour,
+		Version:               cfg.Version,
+		ShowVersion:           cfg.ShowVersion,
 		Logger:                logger,
 	}
 

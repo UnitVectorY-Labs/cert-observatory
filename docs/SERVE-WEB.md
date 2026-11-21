@@ -19,12 +19,12 @@ cert-observatory serve-web [options]
 The `serve-web` command starts an HTTP server that provides a web interface for inspecting TLS certificate chains. Users can enter a domain name to retrieve its certificate chain, view decoded certificate details, and inspect raw PEM content.
 
 Features:
-- Single-page dark-themed interface
+- Single-page light and dark interface following the UnitVectorY-Labs design language (cookie-persisted theme toggle)
 - Real-time certificate chain retrieval via HTMX
-- Two-pane layout with chain overview and certificate details
+- Two-pane certificate view with raw PEM and decoded certificate details
 - Cached results with optional force refresh
 - Rate limiting to prevent abuse
-- Tailwind CSS-based styling with committed compiled assets
+- Zero-build-step embedded `uvy.css` / `uvy.js` styling
 
 ## Options
 
@@ -35,6 +35,7 @@ Features:
 | `--read-timeout` | `15s` | HTTP server read timeout |
 | `--write-timeout` | `60s` | HTTP server write timeout |
 | `--idle-timeout` | `120s` | HTTP server idle timeout |
+| `--show-version` | `true` | Display application version in the web footer |
 
 See [DATABASE.md](DATABASE.md) for database connection options.
 
@@ -44,6 +45,7 @@ See [DATABASE.md](DATABASE.md) for database connection options.
 |----------|---------|-------------|
 | `LISTEN_ADDR` | `:8080` | Server listen address |
 | `CRAWL_TIMEOUT` | `30s` | Timeout for TLS crawl operations |
+| `SHOW_VERSION` | `true` | Display application version in the web footer (set `false` to omit completely) |
 
 ## Examples
 
@@ -60,17 +62,7 @@ cert-observatory serve-web --db-host db.example.com --db-user certuser
 
 ## Frontend Asset Workflow
 
-The web stylesheet is generated with the standalone Tailwind CLI and checked into source control:
-
-```bash
-# Build CSS once
-just tailwind
-```
-
-Generated output: `internal/web/static/css/style.css`  
-Tailwind source input: `internal/web/tailwind.css`
-
-`go build` does not require Tailwind to run when compiled CSS is already present.
+The web UI embeds the UnitVectorY-Labs design stylesheet (`internal/web/static/css/uvy.css`), shell script (`internal/web/static/js/uvy.js`), and official SVG logo marks (`internal/web/static/img/`) directly alongside `internal/web/static/css/style.css` and `internal/web/static/js/script.js` using Go's `embed` package. No external CSS build step is required.
 
 ## Rate Limiting
 

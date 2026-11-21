@@ -1,525 +1,592 @@
 {{define "results"}}
-<div class="results-wrap">
-    <div class="results-toolbar">
-        <div class="status-row">
-            <span class="domain-name">{{.DisplayTarget}}</span>
+<div class="co-results-wrap">
+    <div class="uvy-panel co-results-bar">
+        <div class="co-status-group">
+            <span class="co-domain-name">{{.DisplayTarget}}</span>
             {{if .IsManual}}
-            <span class="status-chip status-fresh">manual import</span>
+            <span class="uvy-status uvy-status--ok">manual import</span>
             {{else if .IsCached}}
-            <span class="status-chip status-cached">cached {{.CacheAge}}</span>
+            <span class="uvy-status uvy-status--warn">cached {{.CacheAge}}</span>
             {{else}}
-            <span class="status-chip status-fresh">now</span>
+            <span class="uvy-status uvy-status--ok">now</span>
             {{end}}
             {{if .LastCrawlFailed}}
-            <span class="status-chip status-error">latest crawl failed</span>
+            <span class="uvy-status uvy-status--danger">latest crawl failed</span>
             {{end}}
         </div>
         {{if and .CanForceRefresh .IsCached}}
-        <form id="refresh-form" method="POST" action="/refresh" class="inline" hx-post="/refresh" hx-target="#results" hx-indicator="#loading">
+        <form id="refresh-form" method="POST" action="/refresh" hx-post="/refresh" hx-target="#results" hx-indicator="#loading">
             <input type="hidden" name="domain" value="{{.DisplayTarget}}">
-            <button type="submit" class="btn-secondary">
-                <span class="htmx-indicator h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-slate-100 dark:border-slate-500 dark:border-t-slate-100"></span>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-                <span class="hidden sm:inline">Refresh</span>
+            <button type="submit" class="uvy-button uvy-button--small">
+                <span class="uvy-spinner htmx-indicator" aria-hidden="true"></span>
+                <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-refresh"></use></svg>
+                <span>Refresh</span>
             </button>
         </form>
         {{end}}
     </div>
 
     {{if .ChainGraph}}
-    <div class="section-card">
-        <div>
-            <h3 class="section-title">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle" style="margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>Certificate Trust Path
-            </h3>
-            <p class="section-copy">Click a certificate to view its details.</p>
-            <div class="legend-row">
-                <span class="legend-item"><span class="legend-swatch legend-chain"></span> Presented In Chain</span>
-                {{if .ChainGraph.Legend.HasServerCertificate}}
-                <span class="legend-item"><span class="legend-swatch legend-leaf"></span> Server Certificate</span>
-                {{end}}
-                {{if .ChainGraph.Legend.HasIntermediateCA}}
-                <span class="legend-item"><span class="legend-swatch legend-intermediate"></span> Intermediate CA</span>
-                {{end}}
-                {{if .ChainGraph.Legend.HasRootCA}}
-                <span class="legend-item"><span class="legend-swatch legend-root"></span> Root CA</span>
-                {{end}}
-                {{if .ChainGraph.Legend.HasMissing}}
-                <span class="legend-item"><span class="legend-swatch legend-missing"></span> Missing</span>
-                {{end}}
-                {{if .ChainGraph.Legend.HasDistrust}}
-                <span class="legend-item"><span class="legend-swatch legend-distrust"></span> ⚠ Distrusted Certificate</span>
-                {{end}}
-                {{if .ChainGraph.Legend.HasExpired}}
-                <span class="legend-item">⛔ Expired Certificate</span>
-                {{end}}
-                {{if .ChainGraph.Legend.CrossSignedMarkers}}
-                <span class="legend-item">{{.ChainGraph.Legend.CrossSignedMarkerKey}} Cross-signed Certificates</span>
+    <section class="uvy-panel co-graph-panel">
+        <div class="uvy-panel__header">
+            <div>
+                <h3 class="with-icon">
+                    <svg class="icon icon-small icon-accent" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-map"></use></svg>
+                    Certificate trust path
+                </h3>
+                <p class="uvy-hint">Click a certificate node to inspect its details.</p>
+            </div>
+        </div>
+
+        <ul class="co-legend" aria-label="Trust path legend">
+            <li><span class="co-swatch co-swatch--chain" aria-hidden="true"></span> Presented in chain</li>
+            {{if .ChainGraph.Legend.HasServerCertificate}}
+            <li><span class="co-swatch co-swatch--leaf" aria-hidden="true"></span> Server certificate</li>
+            {{end}}
+            {{if .ChainGraph.Legend.HasIntermediateCA}}
+            <li><span class="co-swatch co-swatch--intermediate" aria-hidden="true"></span> Intermediate CA</li>
+            {{end}}
+            {{if .ChainGraph.Legend.HasRootCA}}
+            <li><span class="co-swatch co-swatch--root" aria-hidden="true"></span> Root CA</li>
+            {{end}}
+            {{if .ChainGraph.Legend.HasMissing}}
+            <li><span class="co-swatch co-swatch--missing" aria-hidden="true"></span> Missing</li>
+            {{end}}
+            {{if .ChainGraph.Legend.HasDistrust}}
+            <li><span class="co-swatch co-swatch--distrust" aria-hidden="true"></span> ⚠ Distrusted Certificate</li>
+            {{end}}
+            {{if .ChainGraph.Legend.HasExpired}}
+            <li>⛔ Expired certificate</li>
+            {{end}}
+            {{if .ChainGraph.Legend.CrossSignedMarkers}}
+            <li>{{.ChainGraph.Legend.CrossSignedMarkerKey}} Cross-signed certificates</li>
+            {{end}}
+        </ul>
+
+        <div class="co-graph-viewport">
+            <div class="trust-path-mermaid">
+                <pre data-mermaid-source hidden>{{.ChainGraph.MermaidDiagram}}</pre>
+                <pre class="mermaid">{{.ChainGraph.MermaidDiagram}}</pre>
+                {{range $nodeID, $idx := .ChainGraph.MermaidNodeToCertIndex}}
+                <span class="tp-node-map" data-node-id="{{$nodeID}}" data-cert-idx="{{$idx}}" hidden></span>
                 {{end}}
             </div>
         </div>
 
-        <div class="graph-scroll">
-            <div class="graph-center">
-                <div class="trust-path-mermaid py-1">
-                    <pre data-mermaid-source hidden>{{.ChainGraph.MermaidDiagram}}</pre>
-                    <pre class="mermaid">{{.ChainGraph.MermaidDiagram}}</pre>
-                    {{range $nodeID, $idx := .ChainGraph.MermaidNodeToCertIndex}}
-                    <span class="tp-node-map" data-node-id="{{$nodeID}}" data-cert-idx="{{$idx}}" hidden></span>
-                    {{end}}
-                </div>
-            </div>
-        </div>
-        <div class="graph-download-row">
-            <div class="graph-controls" aria-label="Trust path diagram controls">
-                <button type="button" class="btn-graph-control" data-graph-action="zoom-in" title="Zoom in" aria-label="Zoom in">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M7 10l6 0" /><path d="M10 7l0 6" /><path d="M21 21l-6 -6" /></svg>
+        <div class="uvy-panel__footer co-graph-footer">
+            <div class="co-graph-controls" aria-label="Trust path diagram controls">
+                <button type="button" class="uvy-button uvy-button--small" data-graph-action="zoom-in" title="Zoom in" aria-label="Zoom in">
+                    <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-zoom-in"></use></svg>
                 </button>
-                <button type="button" class="btn-graph-control" data-graph-action="zoom-out" title="Zoom out" aria-label="Zoom out">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M7 10l6 0" /><path d="M21 21l-6 -6" /></svg>
+                <button type="button" class="uvy-button uvy-button--small" data-graph-action="zoom-out" title="Zoom out" aria-label="Zoom out">
+                    <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-zoom-out"></use></svg>
                 </button>
-                <button type="button" class="btn-graph-control" data-graph-action="reset" title="Reset view" aria-label="Reset view">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+                <button type="button" class="uvy-button uvy-button--small" data-graph-action="reset" title="Reset view" aria-label="Reset view">
+                    <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-refresh"></use></svg>
                 </button>
             </div>
-            <div class="graph-download-actions" aria-label="Diagram and certificate actions">
-                <button type="button" class="btn-graph-download" onclick="copyMermaid(this)" title="Copy Mermaid source" aria-label="Copy Mermaid source">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg>
-                    <span>Mermaid</span>
+            <div class="co-graph-actions" aria-label="Diagram and certificate actions">
+                <button type="button" class="uvy-button uvy-button--small uvy-copy" onclick="copyMermaid(this)" title="Copy Mermaid source" aria-label="Copy Mermaid source">
+                    <span data-copy class="with-icon">
+                        <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-copy"></use></svg>
+                        Mermaid
+                    </span>
+                    <span data-copied class="with-icon">
+                        <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-check"></use></svg>
+                        Copied
+                    </span>
                 </button>
                 <span data-mermaid-copy-status role="status" class="sr-only"></span>
                 {{if and (not .IsManual) .ChainDownloadURL}}
-                <a class="btn-graph-download" href="{{.ChainDownloadURL}}" title="Download presented chain certificates as PEM">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
+                <a class="uvy-button uvy-button--small" href="{{.ChainDownloadURL}}" title="Download presented chain certificates as PEM">
+                    <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-download"></use></svg>
                     <span>Chain</span>
                 </a>
                 {{end}}
-                <a class="btn-graph-download" href="{{.AllDownloadURL}}" title="Download all graph certificates as PEM">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
+                <a class="uvy-button uvy-button--small" href="{{.AllDownloadURL}}" title="Download all graph certificates as PEM">
+                    <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-download"></use></svg>
                     <span>All</span>
                 </a>
             </div>
         </div>
-
-    </div>
+    </section>
     {{end}}
 
-    <div id="chain-view-section" class="chain-section">
-        <div id="chain-heading" class="mb-4">
-            <h3 class="chain-heading">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle" style="margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></svg>Certificate Chain
-            </h3>
-            <p class="section-copy">The certificate chain as presented by the server during the TLS handshake.</p>
+    <section id="chain-view-section" class="co-chain-section">
+        <div id="chain-heading" class="co-section-heading">
+            <div>
+                <h3 class="with-icon">
+                    <svg class="icon icon-small icon-accent" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-map"></use></svg>
+                    Certificate chain
+                </h3>
+                <p class="uvy-hint">The certificate chain as presented by the server during the TLS handshake.</p>
+            </div>
         </div>
-        <div id="selected-cert-heading" class="mb-4" style="display:none;">
-            <h3 class="chain-heading">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle" style="margin-right: 0.4rem;"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>Selected Certificate
-            </h3>
-            <p class="section-copy">Viewing a single certificate selected from the trust path above.</p>
+        <div id="selected-cert-heading" class="co-section-heading" style="display:none;">
+            <div>
+                <h3 class="with-icon">
+                    <svg class="icon icon-small icon-accent" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-certificate"></use></svg>
+                    Selected certificate
+                </h3>
+                <p class="uvy-hint">Viewing a single certificate selected from the trust path above.</p>
+            </div>
+            <button type="button" class="uvy-button uvy-button--small" onclick="showFullCertChain()">
+                <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-arrow-left"></use></svg>
+                <span>Show full chain</span>
+            </button>
         </div>
 
-        <div id="certificate-chain-list" class="space-y-4">
+        <div id="certificate-chain-list" class="co-chain-list">
             {{range $index, $cert := .Chain}}
-            <div class="cert-card">
-                <div class="cert-top">
-                    <span class="cert-label"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 15a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M13 17.5v4.5l2 -1.5l2 1.5v-4.5" /><path d="M10 19h-5a2 2 0 0 1 -2 -2v-10c0 -1.1 .9 -2 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -1 1.73" /><path d="M6 9l12 0" /><path d="M6 12l3 0" /><path d="M6 15l2 0" /></svg>{{$cert.CertLabel}}</span>
+            <article class="uvy-panel co-cert-panel">
+                <div class="uvy-panel__header">
+                    <h3 class="with-icon">
+                        <svg class="icon icon-small icon-accent" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-certificate"></use></svg>
+                        {{$cert.CertLabel}}
+                    </h3>
+                    <div class="co-cert-meta">
+                        {{if $cert.PublicKeyInfo}}<span class="uvy-badge">{{$cert.PublicKeyInfo}}</span>{{end}}
+                        {{if $cert.DistrustRules}}<span class="uvy-status uvy-status--warn">Distrusted</span>{{end}}
+                        {{if $cert.IsExpired}}
+                        <span class="uvy-status uvy-status--danger">Expired</span>
+                        {{else if $cert.IsNotYetValid}}
+                        <span class="uvy-status uvy-status--warn">Not yet valid</span>
+                        {{else}}
+                        <span class="uvy-status uvy-status--ok">Valid</span>
+                        {{end}}
+                    </div>
                 </div>
 
-                <div class="cert-content">
-                    <div class="pem-column">
-                        <div class="pem-wrap">
-                            <pre class="pem-block" id="pem-{{$cert.HashHex}}">{{$cert.PEM}}</pre>
-                            <button type="button" class="btn-copy" onclick="copyPEM(this, '{{$cert.HashHex}}')">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle">
-                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                                    <path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" />
-                                    <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
-                                </svg>
-                                Copy PEM
-                            </button>
+                <div class="co-cert-layout">
+                    <div class="co-pem-col">
+                        <div class="uvy-code">
+                            <div class="uvy-code__bar">
+                                <span>PEM</span>
+                                <button type="button" class="uvy-button uvy-button--quiet uvy-button--small uvy-copy" onclick="copyPEM(this, '{{$cert.HashHex}}')" aria-label="Copy PEM">
+                                    <span data-copy class="with-icon">
+                                        <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-copy"></use></svg>
+                                        Copy PEM
+                                    </span>
+                                    <span data-copied class="with-icon">
+                                        <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-check"></use></svg>
+                                        Copied
+                                    </span>
+                                </button>
+                            </div>
+                            <pre class="co-pem-pre" id="pem-{{$cert.HashHex}}">{{$cert.PEM}}</pre>
                         </div>
                     </div>
-                    <div class="details-column" data-cert-tabs>
-                        <div class="cert-tab-list" role="tablist" aria-label="Certificate decode view">
-                            <button type="button" class="cert-tab-button is-active" role="tab" aria-selected="true" data-cert-tab-button="overview" onclick="switchCertDecodeTab(this, 'overview')">Overview</button>
-                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="usage" onclick="switchCertDecodeTab(this, 'usage')">Usage</button>
-                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="extensions" onclick="switchCertDecodeTab(this, 'extensions')">Extensions</button>
-                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="raw" onclick="switchCertDecodeTab(this, 'raw')">Raw</button>
+                    <div class="co-details-col" data-cert-tabs>
+                        <div class="uvy-tabs" role="tablist" aria-label="Certificate decode view">
+                            <button type="button" role="tab" aria-selected="true" data-cert-tab-button="overview" onclick="switchCertDecodeTab(this, 'overview')">Overview</button>
+                            <button type="button" role="tab" aria-selected="false" data-cert-tab-button="usage" onclick="switchCertDecodeTab(this, 'usage')">Usage</button>
+                            <button type="button" role="tab" aria-selected="false" data-cert-tab-button="extensions" onclick="switchCertDecodeTab(this, 'extensions')">Extensions</button>
+                            <button type="button" role="tab" aria-selected="false" data-cert-tab-button="raw" onclick="switchCertDecodeTab(this, 'raw')">Raw</button>
                         </div>
-                        <div class="cert-tab-panel" data-cert-tab-panel="overview">
+                        <div data-cert-tab-panel="overview">
                             {{template "cert-overview-details" $cert}}
                         </div>
-                        <div class="cert-tab-panel hidden" data-cert-tab-panel="usage">
+                        <div data-cert-tab-panel="usage" hidden>
                             {{template "cert-usage-details" $cert}}
                         </div>
-                        <div class="cert-tab-panel hidden" data-cert-tab-panel="extensions">
+                        <div data-cert-tab-panel="extensions" hidden>
                             {{template "cert-extensions-details" $cert}}
                         </div>
-                        <div class="cert-tab-panel hidden" data-cert-tab-panel="raw">
+                        <div data-cert-tab-panel="raw" hidden>
                             {{template "cert-raw-details" $cert}}
                         </div>
                     </div>
                 </div>
-            </div>
+            </article>
             {{end}}
         </div>
 
         {{if .ChainGraph}}
         {{range $idx, $gc := .ChainGraph.AllCerts}}
         <div class="trust-path-cert-pane" id="trust-cert-pane-{{$idx}}" style="display:none;">
-            <div class="cert-card">
-                <div class="cert-content">
-                    <div class="pem-column">
-                        <div class="pem-wrap">
-                            <pre class="pem-block" id="pem-g{{$gc.HashHex}}">{{$gc.PEM}}</pre>
-                            <button type="button" class="btn-copy" onclick="copyPEM(this, 'g{{$gc.HashHex}}')">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block align-middle"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg>
-                                Copy PEM
-                            </button>
+            <article class="uvy-panel co-cert-panel">
+                <div class="uvy-panel__header">
+                    <h3 class="with-icon">
+                        <svg class="icon icon-small icon-accent" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-certificate"></use></svg>
+                        {{if $gc.SubjectCN}}{{$gc.SubjectCN}}{{else}}Certificate{{end}}
+                    </h3>
+                    <div class="co-cert-meta">
+                        {{if $gc.PublicKeyInfo}}<span class="uvy-badge">{{$gc.PublicKeyInfo}}</span>{{end}}
+                        {{if $gc.DistrustRules}}<span class="uvy-status uvy-status--warn">Distrusted</span>{{end}}
+                        {{if $gc.IsExpired}}
+                        <span class="uvy-status uvy-status--danger">Expired</span>
+                        {{else if $gc.IsNotYetValid}}
+                        <span class="uvy-status uvy-status--warn">Not yet valid</span>
+                        {{else}}
+                        <span class="uvy-status uvy-status--ok">Valid</span>
+                        {{end}}
+                    </div>
+                </div>
+                <div class="co-cert-layout">
+                    <div class="co-pem-col">
+                        <div class="uvy-code">
+                            <div class="uvy-code__bar">
+                                <span>PEM</span>
+                                <button type="button" class="uvy-button uvy-button--quiet uvy-button--small uvy-copy" onclick="copyPEM(this, 'g{{$gc.HashHex}}')" aria-label="Copy PEM">
+                                    <span data-copy class="with-icon">
+                                        <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-copy"></use></svg>
+                                        Copy PEM
+                                    </span>
+                                    <span data-copied class="with-icon">
+                                        <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-check"></use></svg>
+                                        Copied
+                                    </span>
+                                </button>
+                            </div>
+                            <pre class="co-pem-pre" id="pem-g{{$gc.HashHex}}">{{$gc.PEM}}</pre>
                         </div>
                     </div>
-                    <div class="details-column" data-cert-tabs>
-                        <div class="cert-tab-list" role="tablist" aria-label="Certificate decode view">
-                            <button type="button" class="cert-tab-button is-active" role="tab" aria-selected="true" data-cert-tab-button="overview" onclick="switchCertDecodeTab(this, 'overview')">Overview</button>
-                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="usage" onclick="switchCertDecodeTab(this, 'usage')">Usage</button>
-                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="extensions" onclick="switchCertDecodeTab(this, 'extensions')">Extensions</button>
-                            <button type="button" class="cert-tab-button" role="tab" aria-selected="false" data-cert-tab-button="raw" onclick="switchCertDecodeTab(this, 'raw')">Raw</button>
+                    <div class="co-details-col" data-cert-tabs>
+                        <div class="uvy-tabs" role="tablist" aria-label="Certificate decode view">
+                            <button type="button" role="tab" aria-selected="true" data-cert-tab-button="overview" onclick="switchCertDecodeTab(this, 'overview')">Overview</button>
+                            <button type="button" role="tab" aria-selected="false" data-cert-tab-button="usage" onclick="switchCertDecodeTab(this, 'usage')">Usage</button>
+                            <button type="button" role="tab" aria-selected="false" data-cert-tab-button="extensions" onclick="switchCertDecodeTab(this, 'extensions')">Extensions</button>
+                            <button type="button" role="tab" aria-selected="false" data-cert-tab-button="raw" onclick="switchCertDecodeTab(this, 'raw')">Raw</button>
                         </div>
-                        <div class="cert-tab-panel" data-cert-tab-panel="overview">
+                        <div data-cert-tab-panel="overview">
                             {{template "cert-overview-details" $gc}}
                         </div>
-                        <div class="cert-tab-panel hidden" data-cert-tab-panel="usage">
+                        <div data-cert-tab-panel="usage" hidden>
                             {{template "cert-usage-details" $gc}}
                         </div>
-                        <div class="cert-tab-panel hidden" data-cert-tab-panel="extensions">
+                        <div data-cert-tab-panel="extensions" hidden>
                             {{template "cert-extensions-details" $gc}}
                         </div>
-                        <div class="cert-tab-panel hidden" data-cert-tab-panel="raw">
+                        <div data-cert-tab-panel="raw" hidden>
                             {{template "cert-raw-details" $gc}}
                         </div>
                     </div>
                 </div>
-            </div>
+            </article>
         </div>
         {{end}}
         {{end}}
-    </div>
+    </section>
 </div>
 {{end}}
 
 {{define "cert-overview-details"}}
-<div class="details-stack">
+<div class="co-details-stack">
     {{if .DistrustRules}}
-    <section class="distrust-callout" aria-label="CA certificate distrust">
-        {{range .DistrustRules}}
-        <div class="detail-item">
-            <h4 class="distrust-heading">{{template "distrust-icon"}} {{distrustTitle .}}</h4>
-            {{if eq .Source "mozilla_onecrl"}}<p class="distrust-copy">This CA certificate is listed in Mozilla’s blocklist (OneCRL).</p>
-            <a class="distrust-link" href="{{oneCRLRecordURL .}}" target="_blank" rel="noopener noreferrer">View OneCRL record ↗</a>
-            {{else}}<p class="distrust-copy">This root-store action is reported by {{.SourceLabel}}.</p>{{end}}
-            {{if .Reason}}<div class="distrust-copy">{{.Reason}}</div>{{end}}
-            {{if .EffectiveAt}}<div class="distrust-meta">Effective: {{.EffectiveAt.UTC.Format "2 Jan 2006, 15:04 UTC"}}</div>{{end}}
-            {{if distrustReferenceURL .}}<a class="distrust-link" href="{{distrustReferenceURL .}}" target="_blank" rel="noopener noreferrer">{{if eq .Source "mozilla_onecrl"}}Related Mozilla issue ↗</a><span class="distrust-meta">May require access</span>{{else}}CCADB source information ↗</a>{{end}}{{end}}
-            <div class="distrust-meta">Last confirmed in source: {{.LastSeenAt.UTC.Format "2 Jan 2006, 15:04 UTC"}}</div>
+    <section class="uvy-alert uvy-alert--warn distrust-callout" aria-label="CA certificate distrust">
+        <svg class="icon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-alert-triangle"></use></svg>
+        <div>
+            {{range .DistrustRules}}
+            <div class="co-distrust-item">
+                <strong>{{distrustTitle .}}</strong>
+                {{if eq .Source "mozilla_onecrl"}}<p style="margin-top:var(--uvy-space-1)">This CA certificate is listed in Mozilla’s blocklist (OneCRL).</p>
+                {{else}}<p style="margin-top:var(--uvy-space-1)">This root-store action is reported by {{.SourceLabel}}.</p>{{end}}
+                {{if .Reason}}<p style="margin-top:var(--uvy-space-1)">{{.Reason}}</p>{{end}}
+                <div class="co-distrust-links">
+                    {{if eq .Source "mozilla_onecrl"}}
+                    <a class="with-icon" href="{{oneCRLRecordURL .}}" target="_blank" rel="noopener noreferrer">View OneCRL record <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-external-link"></use></svg></a>
+                    {{end}}
+                    {{if distrustReferenceURL .}}
+                    <a class="with-icon" href="{{distrustReferenceURL .}}" target="_blank" rel="noopener noreferrer">{{if eq .Source "mozilla_onecrl"}}Related Mozilla issue{{else}}CCADB source information{{end}} <svg class="icon icon-small" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-external-link"></use></svg></a>
+                    {{if eq .Source "mozilla_onecrl"}}<span class="uvy-hint">May require access</span>{{end}}
+                    {{end}}
+                </div>
+                <div class="co-distrust-meta">
+                    {{if .EffectiveAt}}<span>Effective: {{.EffectiveAt.UTC.Format "2 Jan 2006, 15:04 UTC"}}</span>{{end}}
+                    <span>Last confirmed in source: {{.LastSeenAt.UTC.Format "2 Jan 2006, 15:04 UTC"}}</span>
+                </div>
+            </div>
+            {{end}}
         </div>
-        {{end}}
     </section>
     {{end}}
+
     {{if or .SubjectDN .IssuerDN .SANs}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Identity</h4>
-        <div class="detail-grid">
+    <section class="co-detail-group">
+        <h4>Identity</h4>
+        <dl class="uvy-kv">
             {{if .SubjectDN}}
-            <div class="detail-item">
-                <div class="detail-label">Subject</div>
-                <div class="detail-box {{.SubjectColor}}">{{.SubjectDN}}</div>
+            <div>
+                <dt>Subject</dt>
+                <dd><span class="co-dn-value {{.SubjectColor}}">{{.SubjectDN}}</span></dd>
             </div>
             {{end}}
             {{if .IssuerDN}}
-            <div class="detail-item">
-                <div class="detail-label">Issuer</div>
-                <div class="detail-box {{.IssuerColor}}">{{.IssuerDN}}</div>
+            <div>
+                <dt>Issuer</dt>
+                <dd><span class="co-dn-value {{.IssuerColor}}">{{.IssuerDN}}</span></dd>
             </div>
             {{end}}
-        </div>
-        {{if .SANs}}
-        <div class="detail-item">
-            <div class="detail-label">Subject Alternative Names ({{len .SANs}})</div>
-            <div class="san-wrap">
-                <div class="san-list">
-                    {{range .SANs}}
-                    <span class="san-pill">{{.}}</span>
-                    {{end}}
-                </div>
+            {{if .SANs}}
+            <div>
+                <dt>SANs ({{len .SANs}})</dt>
+                <dd>
+                    <div class="co-san-wrap">
+                        {{range .SANs}}
+                        <span class="uvy-badge">{{.}}</span>
+                        {{end}}
+                    </div>
+                </dd>
             </div>
-        </div>
-        {{end}}
+            {{end}}
+        </dl>
     </section>
     {{end}}
 
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Validity</h4>
-        <div class="detail-grid">
-            <div class="detail-item">
-                <div class="detail-label">Not Before</div>
-                <div class="detail-value {{if .IsNotYetValid}}detail-future{{else}}detail-valid{{end}}">{{.NotBeforeFormatted}}</div>
+    <section class="co-detail-group">
+        <h4>Validity</h4>
+        <dl class="uvy-kv">
+            <div>
+                <dt>Not before</dt>
+                <dd class="{{if .IsNotYetValid}}co-validity-future{{else}}co-validity-ok{{end}}">{{.NotBeforeFormatted}}</dd>
             </div>
-            <div class="detail-item">
-                <div class="detail-label">Not After</div>
-                <div class="detail-value {{if .IsExpired}}detail-expired{{else}}detail-valid{{end}}">{{.NotAfterFormatted}}</div>
+            <div>
+                <dt>Not after</dt>
+                <dd class="{{if .IsExpired}}co-validity-expired{{else}}co-validity-ok{{end}}">{{.NotAfterFormatted}}</dd>
             </div>
-        </div>
-        <div class="detail-grid">
-            <div class="detail-item">
-                <div class="detail-label">Validity Period</div>
-                <div class="detail-value detail-muted">{{.ValidityPeriod}}</div>
+            <div>
+                <dt>Validity period</dt>
+                <dd class="co-mono-val">{{.ValidityPeriod}}</dd>
             </div>
-            <div class="detail-item">
+            <div>
                 {{if .IsExpired}}
-                <div class="detail-label">Expired</div>
-                <div class="detail-value detail-expired">{{.ExpiresIn}} ago</div>
+                <dt>Expired</dt>
+                <dd class="co-validity-expired">{{.ExpiresIn}} ago</dd>
                 {{else if .IsNotYetValid}}
-                <div class="detail-label">Starts In</div>
-                <div class="detail-value detail-future">not yet valid</div>
+                <dt>Starts in</dt>
+                <dd class="co-validity-future">not yet valid</dd>
                 {{else}}
-                <div class="detail-label">Expires In</div>
-                <div class="detail-value detail-valid">{{.ExpiresIn}}</div>
+                <dt>Expires in</dt>
+                <dd class="co-validity-ok">{{.ExpiresIn}}</dd>
                 {{end}}
             </div>
-        </div>
+        </dl>
     </section>
 
     {{if or .PublicKeyInfo .SignatureAlgorithm}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Cryptography</h4>
-        <div class="detail-grid">
+    <section class="co-detail-group">
+        <h4>Cryptography</h4>
+        <dl class="uvy-kv">
             {{if .PublicKeyInfo}}
-            <div class="detail-item">
-                <div class="detail-label">Public Key</div>
-                <div class="detail-box">{{.PublicKeyInfo}}</div>
+            <div>
+                <dt>Public key</dt>
+                <dd class="co-mono-val">{{.PublicKeyInfo}}</dd>
             </div>
             {{end}}
             {{if .SignatureAlgorithm}}
-            <div class="detail-item">
-                <div class="detail-label">Signature Algorithm</div>
-                <div class="detail-box">{{.SignatureAlgorithm}}</div>
+            <div>
+                <dt>Signature algorithm</dt>
+                <dd class="co-mono-val">{{.SignatureAlgorithm}}</dd>
             </div>
             {{end}}
-        </div>
+        </dl>
     </section>
     {{end}}
 
     {{if or .SerialNumber .SHA256Fingerprint .SHA1Fingerprint}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Identifiers</h4>
-        {{if .SerialNumber}}
-        <div class="detail-item">
-            <div class="detail-label">Serial Number</div>
-            <div class="detail-box detail-box-mono hex-value">{{.SerialNumber}}</div>
-        </div>
-        {{end}}
-        {{if .SHA256Fingerprint}}
-        <div class="detail-item">
-            <div class="detail-label">SHA-256 Fingerprint</div>
-            <div class="detail-box detail-box-mono hex-value">{{.SHA256Fingerprint}}</div>
-        </div>
-        {{end}}
-        {{if .SHA1Fingerprint}}
-        <div class="detail-item">
-            <div class="detail-label">SHA-1 Fingerprint</div>
-            <div class="detail-box detail-box-mono hex-value">{{.SHA1Fingerprint}}</div>
-        </div>
-        {{end}}
+    <section class="co-detail-group">
+        <h4>Identifiers</h4>
+        <dl class="uvy-kv">
+            {{if .SerialNumber}}
+            <div>
+                <dt>Serial number</dt>
+                <dd class="co-mono-val hex-value">{{.SerialNumber}}</dd>
+            </div>
+            {{end}}
+            {{if .SHA256Fingerprint}}
+            <div>
+                <dt>SHA-256 fingerprint</dt>
+                <dd class="co-mono-val hex-value">{{.SHA256Fingerprint}}</dd>
+            </div>
+            {{end}}
+            {{if .SHA1Fingerprint}}
+            <div>
+                <dt>SHA-1 fingerprint</dt>
+                <dd class="co-mono-val hex-value">{{.SHA1Fingerprint}}</dd>
+            </div>
+            {{end}}
+        </dl>
     </section>
     {{end}}
 </div>
 {{end}}
 
 {{define "cert-usage-details"}}
-<div class="details-stack">
-    {{if or .HasBasicConstraints .KeyUsage .ExtKeyUsage}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Usage</h4>
-        {{if .HasBasicConstraints}}
-        <div class="detail-grid">
-            <div class="detail-item">
-                <div class="detail-label">CA</div>
-                <div class="detail-box">{{if .IsCA}}Yes{{else}}No{{end}}</div>
+<div class="co-details-stack">
+    <section class="co-detail-group">
+        <h4>Usage</h4>
+        {{if or .HasBasicConstraints .KeyUsage .ExtKeyUsage}}
+        <dl class="uvy-kv">
+            {{if .HasBasicConstraints}}
+            <div>
+                <dt>CA</dt>
+                <dd class="co-mono-val">{{if .IsCA}}Yes{{else}}No{{end}}</dd>
             </div>
             {{if .HasPathLenConstraint}}
-            <div class="detail-item">
-                <div class="detail-label">Path Length</div>
-                <div class="detail-box">{{.PathLenConstraint}}</div>
+            <div>
+                <dt>Path length</dt>
+                <dd class="co-mono-val">{{.PathLenConstraint}}</dd>
             </div>
             {{end}}
-        </div>
-        {{end}}
-        {{if .KeyUsage}}
-        <div class="detail-item">
-            <div class="detail-label">Key Usage</div>
-            <div class="detail-box">{{.KeyUsage}}</div>
-        </div>
-        {{end}}
-        {{if .ExtKeyUsage}}
-        <div class="detail-item">
-            <div class="detail-label">Extended Key Usage</div>
-            <div class="detail-box">{{.ExtKeyUsage}}</div>
-        </div>
+            {{end}}
+            {{if .KeyUsage}}
+            <div>
+                <dt>Key usage</dt>
+                <dd>{{.KeyUsage}}</dd>
+            </div>
+            {{end}}
+            {{if .ExtKeyUsage}}
+            <div>
+                <dt>Extended key usage</dt>
+                <dd>{{.ExtKeyUsage}}</dd>
+            </div>
+            {{end}}
+        </dl>
+        {{else}}
+        <p class="uvy-hint">No decoded usage extensions available.</p>
         {{end}}
     </section>
-    {{else}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Usage</h4>
-        <div class="detail-box detail-muted">No decoded usage extensions available.</div>
-    </section>
-    {{end}}
 </div>
 {{end}}
 
 {{define "cert-extensions-details"}}
-<div class="details-stack">
+<div class="co-details-stack">
     {{if or .CAIssuersURLs .OCSPURLs}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Authority Information Access</h4>
-        {{if .CAIssuersURLs}}
-        <div class="detail-item">
-            <div class="detail-label">CA Issuers URL</div>
-            <div class="detail-box detail-box-mono">
-                <div class="ca-issuers-list">
-                    {{range .CAIssuersURLs}}
-                    <span>{{.}}</span>
-                    {{end}}
-                </div>
+    <section class="co-detail-group">
+        <h4>Authority information access</h4>
+        <dl class="uvy-kv">
+            {{if .CAIssuersURLs}}
+            <div>
+                <dt>CA issuers URL</dt>
+                <dd>
+                    <div class="co-uri-list">
+                        {{range .CAIssuersURLs}}<span>{{.}}</span>{{end}}
+                    </div>
+                </dd>
             </div>
-        </div>
-        {{end}}
-        {{if .OCSPURLs}}
-        <div class="detail-item">
-            <div class="detail-label">OCSP URL</div>
-            <div class="detail-box detail-box-mono">
-                <div class="ca-issuers-list">
-                    {{range .OCSPURLs}}
-                    <span>{{.}}</span>
-                    {{end}}
-                </div>
+            {{end}}
+            {{if .OCSPURLs}}
+            <div>
+                <dt>OCSP URL</dt>
+                <dd>
+                    <div class="co-uri-list">
+                        {{range .OCSPURLs}}<span>{{.}}</span>{{end}}
+                    </div>
+                </dd>
             </div>
-        </div>
-        {{end}}
+            {{end}}
+        </dl>
     </section>
     {{end}}
 
     {{if or .SKI .AKI}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Key Identifiers</h4>
-        {{if or .SKI .AKI}}
-        <div class="detail-grid">
+    <section class="co-detail-group">
+        <h4>Key identifiers</h4>
+        <dl class="uvy-kv">
             {{if .SKI}}
-            <div class="detail-item">
-                <div class="detail-label">Subject Key Identifier</div>
-                <div class="detail-box detail-box-mono hex-value">{{.SKI}}</div>
+            <div>
+                <dt>Subject key identifier</dt>
+                <dd class="co-mono-val hex-value">{{.SKI}}</dd>
             </div>
             {{end}}
             {{if .AKI}}
-            <div class="detail-item">
-                <div class="detail-label">Authority Key Identifier</div>
-                <div class="detail-box detail-box-mono hex-value">{{.AKI}}</div>
+            <div>
+                <dt>Authority key identifier</dt>
+                <dd class="co-mono-val hex-value">{{.AKI}}</dd>
             </div>
             {{end}}
-        </div>
-        {{end}}
+        </dl>
     </section>
     {{end}}
 
     {{if .NameConstraints}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Name Constraints</h4>
-        <div class="detail-item">
-            <div class="detail-label">Name Constraints</div>
-            <div class="san-wrap">
-                <div class="san-list">
-                    {{range .NameConstraints}}
-                    <span class="san-pill">{{.}}</span>
-                    {{end}}
-                </div>
+    <section class="co-detail-group">
+        <h4>Name constraints</h4>
+        <dl class="uvy-kv">
+            <div>
+                <dt>Constraints</dt>
+                <dd>
+                    <div class="co-san-wrap">
+                        {{range .NameConstraints}}
+                        <span class="uvy-badge">{{.}}</span>
+                        {{end}}
+                    </div>
+                </dd>
             </div>
-        </div>
+        </dl>
     </section>
     {{end}}
 
     {{if .CRLDistributionPoints}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Revocation</h4>
-        <div class="detail-item">
-            <div class="detail-label">CRL Distribution Points</div>
-            <div class="detail-box detail-box-mono">
-                <div class="ca-issuers-list">
-                    {{range .CRLDistributionPoints}}
-                    <span>{{.}}</span>
-                    {{end}}
-                </div>
+    <section class="co-detail-group">
+        <h4>Revocation</h4>
+        <dl class="uvy-kv">
+            <div>
+                <dt>CRL distribution points</dt>
+                <dd>
+                    <div class="co-uri-list">
+                        {{range .CRLDistributionPoints}}<span>{{.}}</span>{{end}}
+                    </div>
+                </dd>
             </div>
-        </div>
+        </dl>
     </section>
     {{end}}
 
     {{if or .CertificatePolicies .PolicyConstraints .PolicyMappings}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Policies</h4>
-        {{if .CertificatePolicies}}
-        <div class="detail-item">
-            <div class="detail-label">Certificate Policies</div>
-            <div class="detail-box detail-box-mono">
-                <div class="ca-issuers-list">
-                    {{range .CertificatePolicies}}
-                    <span>{{.}}</span>
-                    {{end}}
-                </div>
+    <section class="co-detail-group">
+        <h4>Policies</h4>
+        <dl class="uvy-kv">
+            {{if .CertificatePolicies}}
+            <div>
+                <dt>Certificate policies</dt>
+                <dd>
+                    <div class="co-uri-list">
+                        {{range .CertificatePolicies}}<span>{{.}}</span>{{end}}
+                    </div>
+                </dd>
             </div>
-        </div>
-        {{end}}
-        {{if .PolicyConstraints}}
-        <div class="detail-item">
-            <div class="detail-label">Policy Constraints</div>
-            <div class="detail-box detail-box-mono">
-                <div class="ca-issuers-list">
-                    {{range .PolicyConstraints}}
-                    <span>{{.}}</span>
-                    {{end}}
-                </div>
+            {{end}}
+            {{if .PolicyConstraints}}
+            <div>
+                <dt>Policy constraints</dt>
+                <dd>
+                    <div class="co-uri-list">
+                        {{range .PolicyConstraints}}<span>{{.}}</span>{{end}}
+                    </div>
+                </dd>
             </div>
-        </div>
-        {{end}}
-        {{if .PolicyMappings}}
-        <div class="detail-item">
-            <div class="detail-label">Policy Mappings</div>
-            <div class="detail-box detail-box-mono">
-                <div class="ca-issuers-list">
-                    {{range .PolicyMappings}}
-                    <span>{{.}}</span>
-                    {{end}}
-                </div>
+            {{end}}
+            {{if .PolicyMappings}}
+            <div>
+                <dt>Policy mappings</dt>
+                <dd>
+                    <div class="co-uri-list">
+                        {{range .PolicyMappings}}<span>{{.}}</span>{{end}}
+                    </div>
+                </dd>
             </div>
-        </div>
-        {{end}}
+            {{end}}
+        </dl>
     </section>
     {{end}}
 
     {{if not (or .CAIssuersURLs .OCSPURLs .SKI .AKI .NameConstraints .CRLDistributionPoints .CertificatePolicies .PolicyConstraints .PolicyMappings)}}
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Extensions</h4>
-        <div class="detail-box detail-muted">No decoded extension details available.</div>
+    <section class="co-detail-group">
+        <h4>Extensions</h4>
+        <p class="uvy-hint">No decoded extension details available.</p>
     </section>
     {{end}}
 </div>
 {{end}}
 
 {{define "cert-raw-details"}}
-<div class="details-stack">
-    <section class="cert-detail-section">
-        <h4 class="detail-section-title">Raw Decode</h4>
-        <pre class="advanced-decode">{{.AdvancedDecode}}</pre>
+<div class="co-details-stack">
+    <section class="co-detail-group">
+        <h4>Raw decode</h4>
+        <div class="uvy-code" style="margin-bottom:0">
+            <pre class="co-raw-pre">{{.AdvancedDecode}}</pre>
+        </div>
     </section>
 </div>
 {{end}}
-
-{{define "distrust-icon"}}<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4"/><path d="M10.363 3.591l-8.106 14.05a1.914 1.914 0 0 0 1.636 2.859h16.214a1.914 1.914 0 0 0 1.636 -2.859l-8.106 -14.05a1.914 1.914 0 0 0 -3.274 0z"/><path d="M12 16h.01"/></svg>{{end}}

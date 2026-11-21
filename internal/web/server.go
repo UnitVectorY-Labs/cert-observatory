@@ -37,6 +37,10 @@ type Config struct {
 	StandardRefreshWindow time.Duration
 	// ForcedRefreshWindow is the minimum time between forced refreshes
 	ForcedRefreshWindow time.Duration
+	// Version is the application version displayed in the footer when ShowVersion is enabled
+	Version string
+	// ShowVersion controls whether the application version is rendered in the footer
+	ShowVersion bool
 	// Logger is the structured logger
 	Logger *slog.Logger
 }
@@ -51,6 +55,7 @@ func DefaultConfig() *Config {
 		IdleTimeout:           120 * time.Second,
 		StandardRefreshWindow: 23 * time.Hour,
 		ForcedRefreshWindow:   1 * time.Hour,
+		ShowVersion:           true,
 	}
 }
 

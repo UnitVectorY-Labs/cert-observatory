@@ -171,12 +171,20 @@ func TestHandleIndex(t *testing.T) {
 		t.Error("Page should not contain CSRF token field")
 	}
 
-	if !strings.Contains(body, "UnitVectorY Labs") {
-		t.Error("Expected page to contain footer with UnitVectorY Labs")
+	if !strings.Contains(body, "UnitVectorY-Labs") {
+		t.Error("Expected page to contain footer with UnitVectorY-Labs")
+	}
+
+	if !strings.Contains(body, "/static/css/uvy.css?v=") {
+		t.Error("Expected uvy.css URL to include cache-busting version")
 	}
 
 	if !strings.Contains(body, "/static/css/style.css?v=") {
 		t.Error("Expected stylesheet URL to include cache-busting version")
+	}
+
+	if !strings.Contains(body, "/static/js/uvy.js?v=") {
+		t.Error("Expected uvy.js URL to include cache-busting version")
 	}
 
 	if !strings.Contains(body, "/static/js/script.js?v=") {
@@ -186,6 +194,65 @@ func TestHandleIndex(t *testing.T) {
 	if !strings.Contains(body, "/static/js/htmx.min.js?v=") {
 		t.Error("Expected HTMX URL to include cache-busting version")
 	}
+}
+
+func TestHandleIndex_FooterVersion(t *testing.T) {
+	t.Run("renders version when enabled and set", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Version = "v1.4.2"
+		cfg.ShowVersion = true
+		server, err := New(cfg, &mockRepository{}, &mockCrawler{})
+		if err != nil {
+			t.Fatalf("Failed to create server: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		server.handleIndex(w, req)
+
+		body := w.Body.String()
+		if !strings.Contains(body, `<p class="version">Version v1.4.2</p>`) {
+			t.Errorf("expected version element in footer, got body without version")
+		}
+	})
+
+	t.Run("omits version completely when disabled", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Version = "v1.4.2"
+		cfg.ShowVersion = false
+		server, err := New(cfg, &mockRepository{}, &mockCrawler{})
+		if err != nil {
+			t.Fatalf("Failed to create server: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		server.handleIndex(w, req)
+
+		body := w.Body.String()
+		if strings.Contains(body, `class="version"`) || strings.Contains(body, "v1.4.2") {
+			t.Errorf("expected version element and identifier to be omitted when ShowVersion is false")
+		}
+	})
+
+	t.Run("omits version completely when unset", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.Version = ""
+		cfg.ShowVersion = true
+		server, err := New(cfg, &mockRepository{}, &mockCrawler{})
+		if err != nil {
+			t.Fatalf("Failed to create server: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		server.handleIndex(w, req)
+
+		body := w.Body.String()
+		if strings.Contains(body, `class="version"`) {
+			t.Errorf("expected version element to be omitted when Version is empty")
+		}
+	})
 }
 
 func TestHandleIndex_InspectFormUsesDefaultEndpoint(t *testing.T) {

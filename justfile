@@ -33,8 +33,5 @@ docs-serve:
 # Repository-specific commands
 set dotenv-load := true
 
-tailwind:
-  tailwindcss -i ./internal/web/tailwind.css -o ./internal/web/static/css/style.css
-
 serve:
   go run . serve-web

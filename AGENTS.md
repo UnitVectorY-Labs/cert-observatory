@@ -6,16 +6,12 @@ This is a Go application that provides multiple pieces of functionality through 
 - Docker for containerization
 - PostgreSQL for database storage
 - HTMX for dynamic web components
-- Tailwind CSS CLI for build-time stylesheet generation only (compiled CSS is committed and embedded)
+- UnitVectorY-Labs Design (`uvy.css` + `uvy.js`) embedded directly with zero CSS build step, paired with a small app-specific `style.css` using `--uvy-*` tokens
 - No additional JavaScript frameworks beyond HTMX (radical simplicity as design philosophy)
 
 Minimize the use of external dependencies relying on the Go standard library as much as possible.
 
-Tailwind is used for CSS on this project, but not as a JavaScript framework. The Tailwind CLI is used directly to compile the CSS into a single file that is committed to the repository and embedded in the binary. The use of Tailwind is purely for CSS utility classes and does not involve any JavaScript or runtime dependencies.
-
-```
-tailwindcss -i ./internal/web/tailwind.css -o ./internal/web/static/css/style.css
-```
+The web interface adopts the UnitVectorY-Labs design language by embedding `internal/web/static/css/uvy.css` and `internal/web/static/js/uvy.js` verbatim alongside `internal/web/static/css/style.css`, `internal/web/static/js/script.js`, and the official square-canvas SVG marks in `internal/web/static/img/`. No CSS build tool or Node.js toolchain is required.
 
 The icons used by this project are embedded SVGs taken from https://github.com/tabler/tabler-icons and are included as inline SVG in the HTML templates.
 

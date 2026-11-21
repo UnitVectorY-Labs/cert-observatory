@@ -11,9 +11,13 @@ import (
 const assetVersionLength = 12
 
 var versionedAssetPaths = []string{
+	"/static/css/uvy.css",
 	"/static/css/style.css",
+	"/static/js/uvy.js",
 	"/static/js/htmx.min.js",
 	"/static/js/script.js",
+	"/static/img/uvy-standalone-mark-light.svg",
+	"/static/img/uvy-standalone-mark-dark.svg",
 }
 
 func buildAssetVersions(staticFiles fs.FS, assetPaths []string) (map[string]string, error) {
