@@ -1,7 +1,7 @@
 title: cert-observatory
 description: "Fetches the TLS certificate chain presented by a domain and renders each certificate in an easy-to-inspect format with decoded details and raw PEM."
 
-remote_theme: just-the-docs/just-the-docs@v0.12.0
+remote_theme: UnitVectorY-Labs/uvy-docs-theme@v0.2.0
 plugins:
   - jekyll-remote-theme
 
