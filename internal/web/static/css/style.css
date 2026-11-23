@@ -18,13 +18,21 @@
   --co-graph-missing-stroke: var(--uvy-danger);
 }
 
+/* Single-screen workspace: tighten top spacing below the universal header */
+main.page {
+  padding-top: var(--uvy-space-5);
+}
+
 /* Intro grid: query panel + observation details */
 .co-intro-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--uvy-space-5);
-  margin-bottom: var(--uvy-space-6);
+  margin-bottom: var(--uvy-space-5);
   align-items: stretch;
+}
+.co-panel-intro {
+  margin: 0 0 var(--uvy-space-4);
 }
 .co-intro-grid > .uvy-panel {
   margin-top: 0;
@@ -524,7 +532,7 @@
 
 /* Settings disclosure panel */
 .co-settings {
-  margin-top: var(--uvy-space-6);
+  margin-top: var(--uvy-space-5);
   padding: 0;
   overflow: hidden;
 }

@@ -170,16 +170,18 @@
             </svg>
 
             <div class="header-identity">
-                <a class="brand" href="/">
-                    <svg class="uvy-mark" aria-hidden="true" width="28" height="28" viewBox="0 0 100 100">
-                        <g stroke-width="4" stroke-linejoin="round">
-                            <polygon class="uvy-mark__top" points="50,8 82.5,26.75 50,45.5 17.5,26.75" />
-                            <polygon class="uvy-mark__left" points="12.3,35.75 44.8,54.5 44.8,92 12.3,73.25" />
-                            <polygon class="uvy-mark__right" points="55.2,54.5 87.7,35.75 87.7,73.25 55.2,92" />
-                        </g>
-                    </svg>
-                    <span>cert-observatory</span>
-                </a>
+                <h1>
+                    <a class="brand" href="/">
+                        <svg class="uvy-mark" aria-hidden="true" width="28" height="28" viewBox="0 0 100 100">
+                            <g stroke-width="4" stroke-linejoin="round">
+                                <polygon class="uvy-mark__top" points="50,8 82.5,26.75 50,45.5 17.5,26.75" />
+                                <polygon class="uvy-mark__left" points="12.3,35.75 44.8,54.5 44.8,92 12.3,73.25" />
+                                <polygon class="uvy-mark__right" points="55.2,54.5 87.7,35.75 87.7,73.25 55.2,92" />
+                            </g>
+                        </svg>
+                        <span>Cert Observatory</span>
+                    </a>
+                </h1>
             </div>
 
             <button id="theme" class="icon-button" type="button" aria-label="Switch color theme" hidden>
@@ -190,13 +192,6 @@
     </header>
 
     <main class="page" id="main">
-        <div class="uvy-page-header">
-            <div>
-                <h1>{{if .ManualMode}}Import Certificate{{else}}Cert Observatory{{end}}</h1>
-                <p class="uvy-lead">{{if .ManualMode}}Upload PEM certificates to verify signatures and expand trust paths against the catalog.{{else}}Retrieve and inspect TLS certificate chains and trust paths for any domain.{{end}}</p>
-            </div>
-        </div>
-
         <div class="co-intro-grid">
             <section class="uvy-panel">
                 {{if .ManualMode}}
@@ -206,6 +201,7 @@
                         Import Certificate
                     </h2>
                 </div>
+                <p class="uvy-hint co-panel-intro">Upload PEM certificates to verify signatures and expand trust paths against the catalog.</p>
                 <form id="manual-form" method="POST" action="/manual" class="co-manual-form" hx-post="/manual" hx-target="#results" hx-indicator="#loading">
                     <div class="uvy-field" style="margin-bottom:0">
                         <label for="pem-input">PEM certificates</label>
@@ -242,6 +238,7 @@
                         Retrieve certificate
                     </h2>
                 </div>
+                <p class="uvy-hint co-panel-intro">Retrieve and inspect TLS certificate chains and trust paths for any domain.</p>
                 <form id="inspect-form" method="POST" action="/inspect" hx-post="/inspect" hx-target="#results" hx-indicator="#loading">
                     <div class="uvy-field" style="margin-bottom:0">
                         <label for="domain-input">Domain</label>
@@ -341,7 +338,7 @@
             <div class="uvy-empty">
                 <svg class="icon icon-large icon-muted co-empty-icon" aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#tabler-shield-check"></use></svg>
                 <strong>No certificate chain loaded</strong>
-                <p>Enter a domain above to retrieve its TLS certificate chain.</p>
+                <p>{{if .ManualMode}}Paste PEM certificates above to verify signatures and inspect their trust paths.{{else}}Enter a domain above to retrieve its TLS certificate chain.{{end}}</p>
             </div>
             {{end}}
         </div>

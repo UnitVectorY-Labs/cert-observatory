@@ -162,8 +162,20 @@ func TestHandleIndex(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if !strings.Contains(body, "Cert Observatory") {
-		t.Error("Expected page to contain 'Cert Observatory'")
+	if !strings.Contains(body, "<span>Cert Observatory</span>") {
+		t.Error("Expected header brand to contain 'Cert Observatory'")
+	}
+
+	if strings.Contains(body, "<span>cert-observatory</span>") {
+		t.Error("Header brand should not use lowercase repo slug 'cert-observatory'")
+	}
+
+	if strings.Contains(body, "uvy-page-header") {
+		t.Error("Page should not render a redundant uvy-page-header below the header")
+	}
+
+	if strings.Count(body, "<h1>") != 1 {
+		t.Errorf("Expected exactly 1 <h1> element, got %d", strings.Count(body, "<h1>"))
 	}
 
 	// Ensure no CSRF token is present (removed per requirements)
