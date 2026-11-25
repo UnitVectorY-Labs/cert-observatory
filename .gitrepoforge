@@ -8,8 +8,6 @@ config:
   release_github: false
   status: "active"
   justfile: true
-  codecov:
-    enabled: true
   docs:
     enabled: true
   gitignore:
